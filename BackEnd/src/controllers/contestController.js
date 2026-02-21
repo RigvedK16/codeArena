@@ -63,6 +63,14 @@ function computePenaltyMinutes(solvedAtDuration, wrongAttempts) {
   return Math.floor(duration + wrongAttempts * PENALTY_WRONG_ATTEMPT_MINUTES);
 }
 
+async function getParticipantSnapshot(contestId, userId) {
+  const contestForUser = await Contest.findOne(
+    { _id: contestId, "participants.userId": userId },
+    { "participants.$": 1 },
+  );
+  return contestForUser?.participants?.[0] || null;
+}
+
 exports.createContest = async (req, res) => {
   try {
     const adminUserId = req.user?._id;
@@ -123,12 +131,10 @@ exports.createContest = async (req, res) => {
           .json({ success: false, message: "Invalid problemId in problems" });
       }
       if (Number.isNaN(pointValue) || pointValue < 0) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "pointValue must be a non-negative number",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "pointValue must be a non-negative number",
+        });
       }
 
       problems.push({ problemId, pointValue: Math.floor(pointValue) });
@@ -406,13 +412,11 @@ exports.startContestProblem = async (req, res) => {
     const startMs = new Date(contest.startTime).getTime();
     const endMs = new Date(contest.endTime).getTime();
     if (nowMs < startMs || nowMs > endMs) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Contest is not live",
-          phase: getContestPhase(contest, nowMs),
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Contest is not live",
+        phase: getContestPhase(contest, nowMs),
+      });
     }
 
     const isRegistered = (contest.participants || []).some((p) => {
@@ -422,12 +426,10 @@ exports.startContestProblem = async (req, res) => {
         : false;
     });
     if (!isRegistered) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "You are not registered for this contest",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "You are not registered for this contest",
+      });
     }
 
     const contestProblem = (contest.problems || []).find(
@@ -539,12 +541,10 @@ exports.logContestViolation = async (req, res) => {
     );
 
     if (!updateResult.modifiedCount) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "You are not registered for this contest",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "You are not registered for this contest",
+      });
     }
 
     return res.json({ success: true });
@@ -739,12 +739,10 @@ exports.submitContestCode = async (req, res) => {
         : false;
     });
     if (!isRegistered) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "You are not registered for this contest",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "You are not registered for this contest",
+      });
     }
 
     const nowMs = Date.now();
@@ -775,11 +773,7 @@ exports.submitContestCode = async (req, res) => {
       problemObjectId,
     );
 
-    const contestForUser = await Contest.findOne(
-      { _id: contestId, "participants.userId": userId },
-      { "participants.$": 1 },
-    );
-    const participant = contestForUser?.participants?.[0];
+    const participant = await getParticipantSnapshot(contestId, userId);
     const existingStat = participant?.problemStats?.find(
       (ps) => String(ps.problemId) === String(problemId),
     );
@@ -860,11 +854,13 @@ exports.submitContestCode = async (req, res) => {
 
     // No score updates if already solved
     if (alreadySolved) {
+      const freshParticipant = await getParticipantSnapshot(contestId, userId);
       return res.json({
         success: true,
         message: "Submission recorded (problem already solved)",
         submission: submissionDoc,
         status: submissionStatus,
+        participant: freshParticipant,
       });
     }
 
@@ -918,14 +914,20 @@ exports.submitContestCode = async (req, res) => {
       );
 
       if (!updateResult.modifiedCount) {
+        const freshParticipant = await getParticipantSnapshot(
+          contestId,
+          userId,
+        );
         return res.json({
           success: true,
           message: "Submission recorded",
           submission: submissionDoc,
           status: submissionStatus,
+          participant: freshParticipant,
         });
       }
 
+      const freshParticipant = await getParticipantSnapshot(contestId, userId);
       return res.json({
         success: true,
         message: "Accepted",
@@ -934,6 +936,7 @@ exports.submitContestCode = async (req, res) => {
         solvedAtDuration,
         earnedScore,
         penaltyAdded: penaltyToAdd,
+        participant: freshParticipant,
       });
     }
 
@@ -969,6 +972,8 @@ exports.submitContestCode = async (req, res) => {
       },
     );
 
+    const freshParticipant = await getParticipantSnapshot(contestId, userId);
+
     return res.json({
       success: true,
       message: updateResult.modifiedCount
@@ -976,6 +981,7 @@ exports.submitContestCode = async (req, res) => {
         : "Submission recorded",
       submission: submissionDoc,
       status: submissionStatus,
+      participant: freshParticipant,
     });
   } catch (err) {
     console.error("Error in submitContestCode:", err);

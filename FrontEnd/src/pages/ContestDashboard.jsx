@@ -128,18 +128,21 @@ export default function ContestDashboard() {
     }
   };
 
-  const getIsInFullscreen = () => Boolean(
-    document.fullscreenElement ||
-    document.webkitFullscreenElement ||
-    document.mozFullScreenElement ||
-    document.msFullscreenElement
-  );
+  const getIsInFullscreen = () =>
+    Boolean(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement,
+    );
 
   const confirmSolve = async () => {
     if (!solvePopup?.problemId || !contest?._id) return;
     await requestFullscreen();
     if (!getIsInFullscreen()) {
-      alert("Fullscreen is required to start solving. Please allow fullscreen and try again.");
+      alert(
+        "Fullscreen is required to start solving. Please allow fullscreen and try again.",
+      );
       return;
     }
 
@@ -149,9 +152,12 @@ export default function ContestDashboard() {
       body: { problemId: solvePopup.problemId },
     });
 
-    navigate(`/problems/${solvePopup.problemId}?contestId=${contest._id}&fs=1`, {
-      state: { contestSolve: startRes?.data || null },
-    });
+    navigate(
+      `/problems/${solvePopup.problemId}?contestId=${contest._id}&fs=1`,
+      {
+        state: { contestSolve: startRes?.data || null },
+      },
+    );
   };
 
   // Poll leaderboard while Live
@@ -220,8 +226,12 @@ export default function ContestDashboard() {
     return (
       <div className="min-h-screen bg-gray-50 pt-20 pb-12 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-600 text-lg mb-4">{error || "Contest not found"}</p>
-          <Link to="/contests" className="btn btn-primary">Back to Contests</Link>
+          <p className="text-red-600 text-lg mb-4">
+            {error || "Contest not found"}
+          </p>
+          <Link to="/contests" className="btn btn-primary">
+            Back to Contests
+          </Link>
         </div>
       </div>
     );
@@ -235,7 +245,9 @@ export default function ContestDashboard() {
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="min-w-0">
                 <div className="text-xs text-gray-500">Before you start</div>
-                <div className="text-lg font-bold text-gray-900 truncate">{solvePopup.title}</div>
+                <div className="text-lg font-bold text-gray-900 truncate">
+                  {solvePopup.title}
+                </div>
               </div>
               <button
                 type="button"
@@ -256,10 +268,18 @@ export default function ContestDashboard() {
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-3">
-              <button type="button" className="btn btn-outline" onClick={() => setSolvePopup(null)}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setSolvePopup(null)}
+              >
                 Cancel
               </button>
-              <button type="button" className="btn btn-primary" onClick={confirmSolve}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={confirmSolve}
+              >
                 Start Solving
               </button>
             </div>
@@ -270,9 +290,18 @@ export default function ContestDashboard() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <Link to="/contests" className="text-sm text-gray-500 hover:text-emerald-600">← Back to Contests</Link>
-            <h1 className="text-3xl font-bold text-gray-900 truncate mt-1">{contest.title}</h1>
-            {contest.description ? <p className="text-gray-600 mt-1">{contest.description}</p> : null}
+            <Link
+              to="/contests"
+              className="text-sm text-gray-500 hover:text-emerald-600"
+            >
+              ← Back to Contests
+            </Link>
+            <h1 className="text-3xl font-bold text-gray-900 truncate mt-1">
+              {contest.title}
+            </h1>
+            {contest.description ? (
+              <p className="text-gray-600 mt-1">{contest.description}</p>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             {phase === "Live" && !contest.isRegistered ? (
@@ -286,7 +315,12 @@ export default function ContestDashboard() {
                 {registering ? "Registering..." : "Register"}
               </button>
             ) : null}
-            <button onClick={refreshAll} className="btn btn-outline">Refresh</button>
+            <button
+              onClick={refreshAll}
+              className="btn btn-outline border-gray-300 text-gray-900 hover:bg-gray-100"
+            >
+              Refresh
+            </button>
           </div>
         </div>
 
@@ -304,7 +338,9 @@ export default function ContestDashboard() {
             </div>
             <div className="text-center md:text-right">
               <div className="text-xs text-gray-500">{countdownLabel}</div>
-              <div className="font-mono text-3xl font-bold text-emerald-600">{countdownValue}</div>
+              <div className="font-mono text-3xl font-bold text-emerald-600">
+                {countdownValue}
+              </div>
             </div>
           </div>
         </div>
@@ -317,24 +353,51 @@ export default function ContestDashboard() {
 
               <div className="space-y-3">
                 {(contest.problems || []).map((p) => (
-                  <div key={p.problemId?._id || p.problemId} className="p-4 rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors">
+                  <div
+                    key={p.problemId?._id || p.problemId}
+                    role={canSolve ? "button" : undefined}
+                    tabIndex={canSolve ? 0 : undefined}
+                    onClick={canSolve ? () => openSolvePopup(p) : undefined}
+                    onKeyDown={
+                      canSolve
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openSolvePopup(p);
+                            }
+                          }
+                        : undefined
+                    }
+                    className={
+                      canSolve
+                        ? "p-4 rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors cursor-pointer"
+                        : "p-4 rounded-xl border border-gray-200 transition-colors"
+                    }
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-gray-900 truncate">{p.problemId?.title || "Problem"}</div>
-                        <div className="text-xs text-gray-500 mt-1">Points: {p.pointValue}</div>
+                        <div className="text-sm font-semibold text-gray-900 truncate">
+                          {p.problemId?.title || "Problem"}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Points: {p.pointValue}
+                        </div>
                       </div>
                       {canSolve ? (
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline"
-                          onClick={() => openSolvePopup(p)}
+                          className="btn btn-sm border-emerald-600 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openSolvePopup(p);
+                          }}
                         >
                           Solve
                         </button>
                       ) : (
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline opacity-50 cursor-not-allowed"
+                          className="btn btn-sm border-gray-300 text-gray-500 opacity-70 cursor-not-allowed"
                           disabled
                           title={
                             phase !== "Live"
@@ -358,13 +421,17 @@ export default function ContestDashboard() {
           <div className="lg:col-span-2" id="leaderboard">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-900">Live Leaderboard</h2>
-                <div className="text-xs text-gray-500">Sorted by score ↓, penalty ↑</div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  Live Leaderboard
+                </h2>
+                <div className="text-xs text-gray-500">
+                  Sorted by score ↓, penalty ↑
+                </div>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="table w-full">
-                  <thead>
+                <table className="table w-full text-gray-900">
+                  <thead className="bg-gray-50 text-gray-700">
                     <tr>
                       <th>Rank</th>
                       <th>User</th>
@@ -376,7 +443,12 @@ export default function ContestDashboard() {
                   <tbody>
                     {leaderboard.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="text-center text-gray-500 py-10">No participants yet</td>
+                        <td
+                          colSpan={5}
+                          className="text-center text-gray-500 py-10"
+                        >
+                          No participants yet
+                        </td>
                       </tr>
                     ) : (
                       leaderboard.map((row, idx) => (
@@ -384,13 +456,23 @@ export default function ContestDashboard() {
                           <td className="font-medium">{idx + 1}</td>
                           <td>
                             <div className="font-medium text-gray-900">
-                              {row.user ? `${row.user.firstName || ""} ${row.user.lastName || ""}`.trim() : "Unknown"}
+                              {row.user
+                                ? `${row.user.firstName || ""} ${row.user.lastName || ""}`.trim()
+                                : "Unknown"}
                             </div>
-                            {row.user?.emailId ? <div className="text-xs text-gray-500">{row.user.emailId}</div> : null}
+                            {row.user?.emailId ? (
+                              <div className="text-xs text-gray-500">
+                                {row.user.emailId}
+                              </div>
+                            ) : null}
                           </td>
-                          <td className="text-right font-semibold text-emerald-700">{row.totalScore}</td>
+                          <td className="text-right font-semibold text-emerald-700">
+                            {row.totalScore}
+                          </td>
                           <td className="text-right font-mono text-gray-700">{`${row.totalTimeTaken ?? 0}mins`}</td>
-                          <td className="text-right font-mono text-gray-700">{row.totalPenaltyTime}</td>
+                          <td className="text-right font-mono text-gray-700">
+                            {row.totalPenaltyTime}
+                          </td>
                         </tr>
                       ))
                     )}
