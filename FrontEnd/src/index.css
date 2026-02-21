@@ -17,3 +17,7 @@
 .code-editor pre {
     min-height: 400px !important;
 }
+
+body.contest-fullscreen nav.fixed {
+    display: none !important;
+}

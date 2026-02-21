@@ -13,6 +13,8 @@ const jwt = require("jsonwebtoken");
 
 const User = require("../models/user");
 
+const JWT_SECRET = "Arpitttt";
+
 const userAuth = async (req, resp, next) => {
   try {
     const cookies = req.cookies;
@@ -22,7 +24,7 @@ const userAuth = async (req, resp, next) => {
       throw new Error("No tokens Error");
     }
     //validate the token
-    const decodedMessage = await jwt.verify(token, "Arpitttt");
+    const decodedMessage = await jwt.verify(token, JWT_SECRET);
     console.log(decodedMessage);
     const { _id } = decodedMessage;
     // console.log(_id);
@@ -38,7 +40,23 @@ const userAuth = async (req, resp, next) => {
     resp.status(400).send("ERROR: " + err.message);
   }
 };
+
+// Like userAuth, but does not throw when token is missing/invalid.
+// Sets req.user when possible.
+const optionalUserAuth = async (req, resp, next) => {
+  try {
+    const { token } = req.cookies || {};
+    if (!token) return next();
+    const decodedMessage = await jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decodedMessage?._id);
+    if (user) req.user = user;
+    return next();
+  } catch {
+    return next();
+  }
+};
 module.exports = {
   // adminAuth,
   userAuth,
+  optionalUserAuth,
 };

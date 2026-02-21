@@ -47,6 +47,7 @@ import ProblemDetail from "./pages/ProblemDetail.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
 import Contests from "./pages/Contests.jsx";
 import ContestDashboard from "./pages/ContestDashboard.jsx";
+import Leaderboard from "./pages/Leaderboard.jsx";
 
 function App() {
   return (
@@ -90,7 +91,14 @@ function App() {
             </RequireAuth>
           }
         />
-        <Route path="/leaderboard" element={<div className="pt-24 text-center text-2xl">🏆 Leaderboard Coming Soon</div>} />
+        <Route
+          path="/leaderboard"
+          element={
+            <RequireAuth>
+              <Leaderboard />
+            </RequireAuth>
+          }
+        />
         <Route path="/practice" element={<div className="pt-24 text-center text-2xl">📚 Practice Mode Coming Soon</div>} />
         <Route path="/dashboard" element={<div className="pt-24 text-center text-2xl">👤 Dashboard Coming Soon</div>} />
 

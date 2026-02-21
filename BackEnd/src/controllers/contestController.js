@@ -6,6 +6,15 @@ const Problem = require("../models/problem");
 
 const JUDGE0_URL = "https://ce.judge0.com/submissions/?base64_encoded=false&wait=true";
 
+// Scoring / penalty config (minutes-based)
+// Faster solutions earn more points.
+const MAX_TIME_TAKEN_MINUTES = 60;
+const SOLVE_WINDOW_MINUTES = 60;
+const SOLVE_WINDOW_MS = SOLVE_WINDOW_MINUTES * 60 * 1000;
+const SCORE_TIME_DECAY_PER_MIN = 1; // subtract 1 point per minute from base points
+const SCORE_WRONG_ATTEMPT_PENALTY = 10; // subtract 10 points per wrong attempt
+const PENALTY_WRONG_ATTEMPT_MINUTES = 5; // add 5 minutes per wrong attempt to penalty
+
 const LANGUAGE_NAME_BY_ID = {
   52: "C++ (GCC)",
   48: "C (GCC)",
@@ -25,6 +34,30 @@ function getContestPhase(contest, nowMs) {
 function minutesFromStart(contest, nowMs) {
   const startMs = new Date(contest.startTime).getTime();
   return Math.floor((nowMs - startMs) / 60000);
+}
+
+function minutesSince(msStart, nowMs) {
+  return Math.floor((nowMs - msStart) / 60000);
+}
+
+function clampTimeTakenMinutes(mins) {
+  return Math.min(MAX_TIME_TAKEN_MINUTES, Math.max(0, Math.floor(mins)));
+}
+
+function clampMin0(n) {
+  return Math.max(0, n);
+}
+
+function computeEarnedScore(pointValue, solvedAtDuration, wrongAttempts) {
+  const duration = clampTimeTakenMinutes(solvedAtDuration);
+  const timePenaltyPoints = Math.floor(duration * SCORE_TIME_DECAY_PER_MIN);
+  const wrongPenaltyPoints = Math.floor(wrongAttempts * SCORE_WRONG_ATTEMPT_PENALTY);
+  return clampMin0(pointValue - timePenaltyPoints - wrongPenaltyPoints);
+}
+
+function computePenaltyMinutes(solvedAtDuration, wrongAttempts) {
+  const duration = clampTimeTakenMinutes(solvedAtDuration);
+  return Math.floor(duration + wrongAttempts * PENALTY_WRONG_ATTEMPT_MINUTES);
 }
 
 async function judgeAgainstHiddenTests({ problem, sourceCode, languageId }) {
@@ -92,6 +125,32 @@ async function ensureParticipantAndProblemStats(contestId, userId, problemObject
         "participants.$.problemStats": {
           problemId: problemObjectId,
           status: "unsolved",
+          startedAt: null,
+          solvedAtDuration: null,
+          wrongAttempts: 0,
+        },
+      },
+    }
+  );
+}
+
+async function ensureProblemStatsForExistingParticipant(contestId, userId, problemObjectId) {
+  await Contest.updateOne(
+    {
+      _id: contestId,
+      participants: {
+        $elemMatch: {
+          userId,
+          problemStats: { $not: { $elemMatch: { problemId: problemObjectId } } },
+        },
+      },
+    },
+    {
+      $push: {
+        "participants.$.problemStats": {
+          problemId: problemObjectId,
+          status: "unsolved",
+          startedAt: null,
           solvedAtDuration: null,
           wrongAttempts: 0,
         },
@@ -102,6 +161,8 @@ async function ensureParticipantAndProblemStats(contestId, userId, problemObject
 
 exports.listContests = async (req, res) => {
   try {
+    const currentUserId = req.user?._id;
+    const currentUserIdStr = currentUserId ? String(currentUserId) : null;
     const contests = await Contest.find({})
       .select("title description startTime endTime createdBy problems participants")
       .sort({ startTime: -1 })
@@ -118,11 +179,194 @@ exports.listContests = async (req, res) => {
         createdBy: c.createdBy,
         problemsCount: c.problems?.length || 0,
         participantsCount: c.participants?.length || 0,
+        isRegistered: currentUserIdStr
+          ? (c.participants || []).some((p) => {
+              const participantUserId = p?.userId?._id || p?.userId;
+              return participantUserId ? String(participantUserId) === currentUserIdStr : false;
+            })
+          : false,
       })),
     });
   } catch (err) {
     console.error("Error listing contests:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.registerForContest = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const contestId = req.params.id;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const contest = await Contest.findById(contestId).select("startTime endTime problems participants title");
+    if (!contest) {
+      return res.status(404).json({ success: false, message: "Contest not found" });
+    }
+
+    const nowMs = Date.now();
+    const endMs = new Date(contest.endTime).getTime();
+    if (nowMs > endMs) {
+      return res.status(400).json({ success: false, message: "Contest has ended" });
+    }
+
+    const alreadyRegistered = (contest.participants || []).some(
+      (p) => String(p.userId) === String(userId)
+    );
+    if (alreadyRegistered) {
+      return res.json({ success: true, message: "Already registered" });
+    }
+
+    const problemStats = (contest.problems || []).map((p) => ({
+      problemId: p.problemId,
+      status: "unsolved",
+      startedAt: null,
+      solvedAtDuration: null,
+      wrongAttempts: 0,
+    }));
+
+    const updateResult = await Contest.updateOne(
+      { _id: contestId, "participants.userId": { $ne: userId } },
+      {
+        $push: {
+          participants: {
+            userId,
+            totalScore: 0,
+            totalPenaltyTime: 0,
+            problemStats,
+          },
+        },
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: updateResult.modifiedCount ? "Registered" : "Already registered",
+    });
+  } catch (err) {
+    console.error("Error registering for contest:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.startContestProblem = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const contestId = req.params.id;
+    const { problemId } = req.body;
+
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!problemId) return res.status(400).json({ success: false, message: "Missing problemId" });
+
+    const contest = await Contest.findById(contestId).select("startTime endTime problems participants");
+    if (!contest) return res.status(404).json({ success: false, message: "Contest not found" });
+
+    const nowMs = Date.now();
+    const startMs = new Date(contest.startTime).getTime();
+    const endMs = new Date(contest.endTime).getTime();
+    if (nowMs < startMs || nowMs > endMs) {
+      return res.status(400).json({ success: false, message: "Contest is not live", phase: getContestPhase(contest, nowMs) });
+    }
+
+    const isRegistered = (contest.participants || []).some((p) => {
+      const participantUserId = p?.userId?._id || p?.userId;
+      return participantUserId ? String(participantUserId) === String(userId) : false;
+    });
+    if (!isRegistered) {
+      return res.status(403).json({ success: false, message: "You are not registered for this contest" });
+    }
+
+    const contestProblem = (contest.problems || []).find((p) => String(p.problemId) === String(problemId));
+    if (!contestProblem) {
+      return res.status(400).json({ success: false, message: "Problem not part of contest" });
+    }
+
+    const problemObjectId = new mongoose.Types.ObjectId(problemId);
+    await ensureProblemStatsForExistingParticipant(contestId, userId, problemObjectId);
+
+    // Set startedAt only if it's not set yet (or missing)
+    const nowDate = new Date(nowMs);
+    await Contest.updateOne(
+      {
+        _id: contestId,
+        participants: {
+          $elemMatch: {
+            userId,
+            problemStats: {
+              $elemMatch: {
+                problemId: problemObjectId,
+                $or: [{ startedAt: null }, { startedAt: { $exists: false } }],
+              },
+            },
+          },
+        },
+      },
+      {
+        $set: {
+          "participants.$[p].problemStats.$[ps].startedAt": nowDate,
+        },
+      },
+      {
+        arrayFilters: [{ "p.userId": userId }, { "ps.problemId": problemObjectId }],
+      }
+    );
+
+    const contestForUser = await Contest.findOne(
+      { _id: contestId, "participants.userId": userId },
+      { "participants.$": 1 }
+    );
+    const participant = contestForUser?.participants?.[0];
+    const existingStat = participant?.problemStats?.find((ps) => String(ps.problemId) === String(problemId));
+
+    const startedAt = existingStat?.startedAt ? new Date(existingStat.startedAt) : nowDate;
+    const expiresAt = new Date(startedAt.getTime() + SOLVE_WINDOW_MS);
+
+    return res.json({
+      success: true,
+      data: {
+        startedAt,
+        expiresAt,
+      },
+    });
+  } catch (err) {
+    console.error("Error in startContestProblem:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.logContestViolation = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const contestId = req.params.id;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const contest = await Contest.findById(contestId).select("startTime endTime participants");
+    if (!contest) return res.status(404).json({ success: false, message: "Contest not found" });
+
+    const nowMs = Date.now();
+    const startMs = new Date(contest.startTime).getTime();
+    const endMs = new Date(contest.endTime).getTime();
+    if (nowMs < startMs || nowMs > endMs) {
+      return res.status(400).json({ success: false, message: "Contest is not live" });
+    }
+
+    const updateResult = await Contest.updateOne(
+      { _id: contestId, "participants.userId": userId },
+      {
+        $inc: { "participants.$[p].fullscreenViolations": 1 },
+        $set: { "participants.$[p].lastFullscreenViolationAt": new Date(nowMs) },
+      },
+      { arrayFilters: [{ "p.userId": userId }] }
+    );
+
+    if (!updateResult.modifiedCount) {
+      return res.status(403).json({ success: false, message: "You are not registered for this contest" });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Error in logContestViolation:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -136,7 +380,17 @@ exports.getContestById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Contest not found" });
     }
 
-    res.json({ success: true, data: contest });
+    const currentUserId = req.user?._id;
+    const currentUserIdStr = currentUserId ? String(currentUserId) : null;
+    const isRegistered = currentUserIdStr
+      ? (contest.participants || []).some((p) => {
+          const participantUserId = p?.userId?._id || p?.userId;
+          return participantUserId ? String(participantUserId) === currentUserIdStr : false;
+        })
+      : false;
+
+    const data = contest.toObject ? contest.toObject() : contest;
+    res.json({ success: true, data: { ...data, isRegistered } });
   } catch (err) {
     console.error("Error fetching contest:", err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -154,12 +408,35 @@ exports.getContestLeaderboard = async (req, res) => {
       return res.status(404).json({ success: false, message: "Contest not found" });
     }
 
+    const pointsByProblemId = new Map(
+      (contest.problems || []).map((cp) => [String(cp.problemId), cp.pointValue || 0])
+    );
+
     const leaderboard = (contest.participants || [])
-      .map((p) => ({
-        user: p.userId,
-        totalScore: p.totalScore || 0,
-        totalPenaltyTime: p.totalPenaltyTime || 0,
-      }))
+      .map((p) => {
+        let totalScore = 0;
+        let totalPenaltyTime = 0;
+        let totalTimeTaken = 0;
+
+        const stats = p.problemStats || [];
+        for (const ps of stats) {
+          if (ps.status !== "solved") continue;
+          const pointValue = pointsByProblemId.get(String(ps.problemId)) || 0;
+          const solvedAtDuration = clampTimeTakenMinutes(ps.solvedAtDuration ?? 0);
+          const wrongAttempts = ps.wrongAttempts ?? 0;
+
+          totalScore += computeEarnedScore(pointValue, solvedAtDuration, wrongAttempts);
+          totalPenaltyTime += computePenaltyMinutes(solvedAtDuration, wrongAttempts);
+          totalTimeTaken += Math.floor(solvedAtDuration);
+        }
+
+        return {
+          user: p.userId,
+          totalScore,
+          totalPenaltyTime,
+          totalTimeTaken,
+        };
+      })
       .sort((a, b) => {
         if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
         return a.totalPenaltyTime - b.totalPenaltyTime;
@@ -173,6 +450,60 @@ exports.getContestLeaderboard = async (req, res) => {
   } catch (err) {
     console.error("Error fetching leaderboard:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.getGlobalContestLeaderboard = async (req, res) => {
+  try {
+    const contests = await Contest.find({})
+      .select("problems participants")
+      .populate("participants.userId", "firstName lastName emailId");
+
+    const totalsByUserId = new Map();
+
+    for (const contest of contests) {
+      for (const participant of contest.participants || []) {
+        const participantUserId = participant?.userId?._id || participant?.userId;
+        if (!participantUserId) continue;
+        const userIdStr = String(participantUserId);
+
+        const contestScore = Number(participant.totalScore) || 0;
+        const contestPenalty = Number(participant.totalPenaltyTime) || 0;
+
+        const prev = totalsByUserId.get(userIdStr) || {
+          user: participant.userId,
+          totalScore: 0,
+          totalPenaltyTime: 0,
+        };
+
+        const userObj = prev.user || participant.userId;
+
+        totalsByUserId.set(userIdStr, {
+          user: userObj,
+          totalScore: prev.totalScore + contestScore,
+          totalPenaltyTime: prev.totalPenaltyTime + contestPenalty,
+        });
+      }
+    }
+
+    const rows = Array.from(totalsByUserId.values()).sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+      if (a.totalPenaltyTime !== b.totalPenaltyTime) return a.totalPenaltyTime - b.totalPenaltyTime;
+      return String(a.user?._id || "").localeCompare(String(b.user?._id || ""));
+    });
+
+    const ranked = rows.map((row, idx) => ({
+      rank: idx + 1,
+      user: row.user,
+      totalScore: row.totalScore,
+      // Keep penalty in payload for tie-break transparency/debugging (UI may ignore)
+      totalPenaltyTime: row.totalPenaltyTime,
+    }));
+
+    return res.json({ success: true, data: ranked });
+  } catch (err) {
+    console.error("Error fetching global contest leaderboard:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -190,6 +521,14 @@ exports.submitContestCode = async (req, res) => {
     const contest = await Contest.findById(contestId);
     if (!contest) {
       return res.status(404).json({ success: false, message: "Contest not found" });
+    }
+
+    const isRegistered = (contest.participants || []).some((p) => {
+      const participantUserId = p?.userId?._id || p?.userId;
+      return participantUserId ? String(participantUserId) === String(userId) : false;
+    });
+    if (!isRegistered) {
+      return res.status(403).json({ success: false, message: "You are not registered for this contest" });
     }
 
     const nowMs = Date.now();
@@ -211,15 +550,57 @@ exports.submitContestCode = async (req, res) => {
     }
 
     const problemObjectId = new mongoose.Types.ObjectId(problemId);
-    await ensureParticipantAndProblemStats(contestId, userId, problemObjectId);
 
-    const participant = (contest.participants || []).find(
-      (p) => String(p.userId) === String(userId)
+    await ensureProblemStatsForExistingParticipant(contestId, userId, problemObjectId);
+
+    const contestForUser = await Contest.findOne(
+      { _id: contestId, "participants.userId": userId },
+      { "participants.$": 1 }
     );
-    const existingStat = participant?.problemStats?.find(
-      (ps) => String(ps.problemId) === String(problemId)
-    );
+    const participant = contestForUser?.participants?.[0];
+    const existingStat = participant?.problemStats?.find((ps) => String(ps.problemId) === String(problemId));
     const alreadySolved = existingStat?.status === "solved";
+
+    // If startedAt isn't set (older data / user didn't call start endpoint), set it now.
+    let startedAtMs = existingStat?.startedAt ? new Date(existingStat.startedAt).getTime() : null;
+    if (!startedAtMs) {
+      const nowDate = new Date(nowMs);
+      await Contest.updateOne(
+        {
+          _id: contestId,
+          participants: {
+            $elemMatch: {
+              userId,
+              problemStats: {
+                $elemMatch: {
+                  problemId: problemObjectId,
+                  $or: [{ startedAt: null }, { startedAt: { $exists: false } }],
+                },
+              },
+            },
+          },
+        },
+        {
+          $set: {
+            "participants.$[p].problemStats.$[ps].startedAt": nowDate,
+          },
+        },
+        {
+          arrayFilters: [{ "p.userId": userId }, { "ps.problemId": problemObjectId }],
+        }
+      );
+      startedAtMs = nowMs;
+    }
+
+    const elapsedMs = nowMs - startedAtMs;
+    // Small grace to account for timer drift.
+    const GRACE_MS = 5000;
+    if (elapsedMs > SOLVE_WINDOW_MS + GRACE_MS) {
+      return res.status(400).json({
+        success: false,
+        message: "Time is over for this problem",
+      });
+    }
 
     // Judge now (even if already solved, we still store the submission)
     const problem = await Problem.findById(problemId);
@@ -257,9 +638,10 @@ exports.submitContestCode = async (req, res) => {
     }
 
     if (submissionStatus === "Accepted") {
-      const solvedAtDuration = minutesFromStart(contest, nowMs);
+      const solvedAtDuration = clampTimeTakenMinutes(minutesSince(startedAtMs, nowMs));
       const wrongAttempts = existingStat?.wrongAttempts || 0;
-      const penaltyToAdd = solvedAtDuration + wrongAttempts * 20;
+      const earnedScore = computeEarnedScore(contestProblem.pointValue, solvedAtDuration, wrongAttempts);
+      const penaltyToAdd = computePenaltyMinutes(solvedAtDuration, wrongAttempts);
 
       const updateResult = await Contest.updateOne(
         {
@@ -279,7 +661,7 @@ exports.submitContestCode = async (req, res) => {
             "participants.$[p].problemStats.$[ps].solvedAtDuration": solvedAtDuration,
           },
           $inc: {
-            "participants.$[p].totalScore": contestProblem.pointValue,
+            "participants.$[p].totalScore": earnedScore,
             "participants.$[p].totalPenaltyTime": penaltyToAdd,
           },
         },
@@ -303,6 +685,8 @@ exports.submitContestCode = async (req, res) => {
         submission: submissionDoc,
         status: submissionStatus,
         solvedAtDuration,
+        earnedScore,
+        penaltyAdded: penaltyToAdd,
       });
     }
 

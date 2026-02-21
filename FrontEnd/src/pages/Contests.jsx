@@ -23,6 +23,7 @@ export default function Contests() {
   const [contests, setContests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [registeringId, setRegisteringId] = useState(null);
 
   const fetchContests = async () => {
     try {
@@ -40,6 +41,18 @@ export default function Contests() {
   useEffect(() => {
     fetchContests();
   }, []);
+
+  const handleRegister = async (contestId) => {
+    try {
+      setRegisteringId(contestId);
+      await api(`/contests/${contestId}/register`, { method: "POST" });
+      await fetchContests();
+    } catch (err) {
+      alert(err.message || "Registration failed");
+    } finally {
+      setRegisteringId(null);
+    }
+  };
 
   const contestsWithStatus = useMemo(() => {
     return (contests || []).map((c) => ({ ...c, status: getContestStatus(c) }));
@@ -82,42 +95,90 @@ export default function Contests() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {contestsWithStatus.map((contest) => (
-              <Link
-                key={contest._id}
-                to={`/contests/${contest._id}`}
-                className="block bg-white rounded-2xl shadow-sm border border-gray-200 hover:shadow-md hover:border-emerald-300 transition-all"
-              >
-                <div className="p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusBadgeClass(contest.status)}`}>
-                        {contest.status}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {contest.problemsCount || 0} problems • {contest.participantsCount || 0} participants
-                      </span>
+            {contestsWithStatus.map((contest) => {
+              const card = (
+                <div
+                  className={
+                    contest.status === "Live"
+                      ? "block bg-white rounded-2xl shadow-sm border border-gray-200 hover:shadow-md hover:border-emerald-300 transition-all"
+                      : "block bg-white rounded-2xl shadow-sm border border-gray-200 opacity-80"
+                  }
+                >
+                  <div className="p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusBadgeClass(contest.status)}`}>
+                          {contest.status}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {contest.problemsCount || 0} problems • {contest.participantsCount || 0} participants
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 truncate">{contest.title}</h3>
+                      {contest.description ? (
+                        <p className="text-gray-600 text-sm mt-1 line-clamp-2">{contest.description}</p>
+                      ) : null}
+                      <div className="text-xs text-gray-500 mt-3">
+                        <span className="font-medium">Start:</span> {formatDateTime(contest.startTime)}
+                        <span className="mx-2">•</span>
+                        <span className="font-medium">End:</span> {formatDateTime(contest.endTime)}
+                      </div>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 truncate">{contest.title}</h3>
-                    {contest.description ? (
-                      <p className="text-gray-600 text-sm mt-1 line-clamp-2">{contest.description}</p>
-                    ) : null}
-                    <div className="text-xs text-gray-500 mt-3">
-                      <span className="font-medium">Start:</span> {formatDateTime(contest.startTime)}
-                      <span className="mx-2">•</span>
-                      <span className="font-medium">End:</span> {formatDateTime(contest.endTime)}
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 text-gray-400">
-                    <span className="text-sm font-medium text-emerald-600">Open</span>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <div className="flex items-center gap-2">
+                      {contest.status === "Live" ? (
+                        <>
+                          <span className="text-sm font-medium text-emerald-600">Open</span>
+                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </>
+                      ) : contest.status === "Upcoming" ? (
+                        contest.isRegistered ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="btn btn-outline opacity-80"
+                            title="You are registered"
+                          >
+                            Registered
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={registeringId === contest._id}
+                            onClick={() => handleRegister(contest._id)}
+                          >
+                            {registeringId === contest._id ? "Registering..." : "Register"}
+                          </button>
+                        )
+                      ) : (
+                        <span className="text-sm font-medium text-gray-500">Closed</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </Link>
-            ))}
+              );
+
+              if (contest.status === "Live") {
+                return (
+                  <Link key={contest._id} to={`/contests/${contest._id}`}> 
+                    {card}
+                  </Link>
+                );
+              }
+
+              return (
+                <div
+                  key={contest._id}
+                  className={contest.status === "Past" ? "cursor-not-allowed" : "cursor-default"}
+                  title={contest.status === "Past" ? "Contest has ended" : "Contest is not live yet"}
+                >
+                  {card}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

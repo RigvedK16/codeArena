@@ -62,7 +62,7 @@ int main() {
 `,
 };
 
-export default function CodeEditor({ problemId, onRun, running, results, onChange, onClearResults }) {
+export default function CodeEditor({ problemId, onRun, running, results, onChange, onClearResults, editorHeightClass = "h-[20rem]" }) {
 
     const [languageId, setLanguageId] = useState(71);
     const [sourceCode, setSourceCode] = useState("");
@@ -128,7 +128,7 @@ export default function CodeEditor({ problemId, onRun, running, results, onChang
             </div>
 
             {/* Editor */}
-            <div className="flex h-[20rem] bg-gray-900 rounded-b-xl overflow-auto">
+            <div className={`flex ${editorHeightClass} bg-gray-900 rounded-b-xl overflow-auto`}>
                 {/* Line Numbers (scrolls with editor) */}
                 <div className="shrink-0 w-10 bg-gray-800 text-gray-500 text-xs py-4 px-2 text-right select-none border-r border-gray-700">
                     {sourceCode.split("\n").map((_, i) => (

@@ -5,6 +5,7 @@
   "scripts": {
     "build": "nodemon src/app.js",
     "start": "node src/app.js",
+    "contest:live": "node src/scripts/setContestLive.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
