@@ -1,100 +1,178 @@
 // const express = require("express");
 // const router = express.Router();
 // const Problem = require("../models/problem");
+// const Submission = require("../models/submission");
 // const axios = require("axios");
 // const { userAuth } = require("../middleware/adminAuth");
 
-// // Protected RUN route
-// router.post("/run", userAuth, async (req, res) => {
+// router.post("/submit", userAuth, async (req, res) => {
 //     try {
 //         const { problemId, sourceCode, languageId } = req.body;
+//         const user = req.user;
 
 //         if (!problemId || !sourceCode || !languageId) {
 //             return res.status(400).json({ message: "Missing fields" });
 //         }
 
-//         // Logged-in user
-//         const user = req.user;
-
-//         // Fetch problem
 //         const problem = await Problem.findById(problemId);
 //         if (!problem) {
 //             return res.status(404).json({ message: "Problem not found" });
 //         }
 
-//         const sampleTestcases = problem.sampleTestcases;
-//         let results = [];
+//         const hiddenTestcases = problem.hiddenTestcases;
 
-//         for (let testcase of sampleTestcases) {
-//             // const judgeResponse = await axios.post(
-//             //     "https://ce.judge0.com/submissions/?base64_encoded=false&wait=true",
-//             //     {
-//             //         source_code: sourceCode,
-//             //         language_id: languageId,
-//             //         stdin: testcase.input,
-//             //     },
-//             //     {
-//             //         headers: {
-//             //             "Content-Type": "application/json",
-//             //         },
-//             //     }
-//             // );
+//         let passed = 0;
+//         let total = hiddenTestcases.length;
+//         let finalVerdict = "Accepted";
+
+//         for (let testcase of hiddenTestcases) {
+
 //             const judgeResponse = await axios.post(
-//                 "https://ce.judge0.com/submissions/?base64_encoded=false&wait=true", // 👈 Removed trailing spaces
+//                 "https://ce.judge0.com/submissions/?base64_encoded=false&wait=true",
 //                 {
 //                     source_code: sourceCode,
 //                     language_id: languageId,
 //                     stdin: testcase.input,
 //                 },
 //                 {
-//                     headers: {
-//                         "Content-Type": "application/json",
-//                         // Add X-RapidAPI-Key if using RapidAPI version
-//                         // "X-RapidAPI-Key": process.env.JUDGE0_API_KEY,
-//                     },
+//                     headers: { "Content-Type": "application/json" },
 //                 }
 //             );
-//             if (judgeResponse.data.status?.id !== 3) { // 3 = Accepted
-//                 // Handle compilation/runtime errors
-//                 results.push({
-//                     input: testcase.input,
-//                     expectedOutput: testcase.output,
-//                     actualOutput: judgeResponse.data.stderr || judgeResponse.data.stdout?.trim() || "",
-//                     status: judgeResponse.data.status?.description || "Unknown Error",
-//                     time: judgeResponse.data.time,
-//                     memory: judgeResponse.data.memory,
-//                 });
-//             } else {
-//                 results.push({
-//                     input: testcase.input,
-//                     expectedOutput: testcase.output,
-//                     actualOutput: judgeResponse.data.stdout?.trim(),
-//                     status: "Accepted",
-//                     time: judgeResponse.data.time,
-//                     memory: judgeResponse.data.memory,
-//                 });
+
+//             const statusId = judgeResponse.data.status?.id;
+//             const output = judgeResponse.data.stdout?.trim();
+
+//             if (statusId !== 3) {
+//                 finalVerdict = judgeResponse.data.status.description;
+//                 break;
 //             }
+
+//             if (output !== testcase.output.trim()) {
+//                 finalVerdict = "Wrong Answer";
+//                 break;
+//             }
+
+//             passed++;
 //         }
 
-//         console.log("Results being sent:", results);
+//         if (passed !== total && finalVerdict === "Accepted") {
+//             finalVerdict = "Wrong Answer";
+//         }
+
+//         const submission = await Submission.create({
+//             userId: user._id,
+//             problemId,
+//             sourceCode,
+//             languageId,
+//             verdict: finalVerdict,
+//             passedTestcases: passed,
+//             totalTestcases: total,
+//         });
 
 //         res.json({
-//             message: "Run completed",
-//             userId: user._id,
-//             results,
+//             verdict: finalVerdict,
+//             passedTestcases: passed,
+//             totalTestcases: total,
 //         });
 
 //     } catch (error) {
 //         console.error(error);
-//         res.status(500).json({ message: "Run failed" });
+//         res.status(500).json({ message: "Submission failed" });
 //     }
 // });
 
 // module.exports = router;
 
+// const express = require("express");
+// const router = express.Router();
+// const Problem = require("../models/problem");
+// const Submission = require("../models/submission");
+// const axios = require("axios");
+// const { userAuth } = require("../middleware/adminAuth");
+
+// router.post("/submit", userAuth, async (req, res) => {
+//     try {
+//         const { problemId, sourceCode, languageId } = req.body;
+//         const user = req.user;
+
+//         if (!problemId || !sourceCode || !languageId) {
+//             return res.status(400).json({ message: "Missing fields" });
+//         }
+
+//         const problem = await Problem.findById(problemId);
+//         if (!problem) {
+//             return res.status(404).json({ message: "Problem not found" });
+//         }
+
+//         const hiddenTestcases = problem.hiddenTestcases;
+
+//         let passed = 0;
+//         let total = hiddenTestcases.length;
+//         let finalVerdict = "Accepted";
+
+//         for (let testcase of hiddenTestcases) {
+
+//             const judgeResponse = await axios.post(
+//                 "https://ce.judge0.com/submissions/?base64_encoded=false&wait=true",
+//                 {
+//                     source_code: sourceCode,
+//                     language_id: languageId,
+//                     stdin: testcase.input,
+//                 },
+//                 {
+//                     headers: { "Content-Type": "application/json" },
+//                 }
+//             );
+
+//             const statusId = judgeResponse.data.status?.id;
+//             const output = judgeResponse.data.stdout?.trim();
+
+//             if (statusId !== 3) {
+//                 finalVerdict = judgeResponse.data.status.description;
+//                 break;
+//             }
+
+//             if (output !== testcase.output.trim()) {
+//                 finalVerdict = "Wrong Answer";
+//                 break;
+//             }
+
+//             passed++;
+//         }
+
+//         if (passed !== total && finalVerdict === "Accepted") {
+//             finalVerdict = "Wrong Answer";
+//         }
+
+//         const submission = await Submission.create({
+//             userId: user._id,
+//             problemId,
+//             sourceCode,
+//             languageId,
+//             verdict: finalVerdict,
+//             passedTestcases: passed,
+//             totalTestcases: total,
+//         });
+
+//         res.json({
+//             verdict: finalVerdict,
+//             passedTestcases: passed,
+//             totalTestcases: total,
+//         });
+
+//     } catch (error) {
+//         console.error(error);
+//         res.status(500).json({ message: "Submission failed" });
+//     }
+// });
+
+// module.exports = router;
+
+// routes/submit.js
 const express = require("express");
 const router = express.Router();
 const Problem = require("../models/problem");
+const Submission = require("../models/submission");
 const axios = require("axios");
 const { userAuth } = require("../middleware/adminAuth");
 
@@ -142,7 +220,7 @@ console.log(JSON.stringify(result));
 `;
 }
 
-// ---------- C++ WRAPPER (Fixed - no if constexpr) ----------
+// ---------- C++ WRAPPER ----------
 function buildCPPWrapper(sourceCode, inputObj) {
   let includes = "#include <bits/stdc++.h>\nusing namespace std;\n\n";
   let vars = "";
@@ -192,7 +270,6 @@ function buildPythonWrapper(sourceCode, inputObj) {
 
   for (let key in inputObj) {
     args.push(key);
-    // Python syntax for arrays/lists
     if (Array.isArray(inputObj[key])) {
       vars += `${key} = ${JSON.stringify(inputObj[key])}\n`;
     } else {
@@ -217,7 +294,6 @@ function buildJavaWrapper(sourceCode, inputObj) {
   let imports = "import java.util.*;\n\n";
   let vars = "";
   let args = [];
-  let argTypes = [];
 
   for (let key in inputObj) {
     args.push(key);
@@ -225,13 +301,10 @@ function buildJavaWrapper(sourceCode, inputObj) {
       // Java array initialization
       let arr = inputObj[key].join(",");
       vars += `int[] ${key} = {${arr}};\n`;
-      argTypes.push("int[]");
     } else if (typeof inputObj[key] === "string") {
       vars += `String ${key} = "${inputObj[key]}";\n`;
-      argTypes.push("String");
     } else {
       vars += `int ${key} = ${inputObj[key]};\n`;
-      argTypes.push("int");
     }
   }
 
@@ -309,30 +382,38 @@ function normalizeOutput(output) {
   }
 }
 
-// ---------- RUN ROUTE ----------
-router.post("/run", userAuth, async (req, res) => {
+// ---------- SUBMIT ROUTE ----------
+router.post("/submit", userAuth, async (req, res) => {
   try {
     const { problemId, sourceCode, languageId } = req.body;
+    const user = req.user;
 
+    // Validate request
     if (!problemId || !sourceCode || !languageId) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const user = req.user;
+    // Fetch problem
     const problem = await Problem.findById(problemId);
-
     if (!problem) {
       return res.status(404).json({ message: "Problem not found" });
     }
 
-    const sampleTestcases = problem.sampleTestcases;
-    if (!sampleTestcases || sampleTestcases.length === 0) {
-      return res.status(400).json({ message: "No test cases configured" });
+    const hiddenTestcases = problem.hiddenTestcases;
+    if (!hiddenTestcases || hiddenTestcases.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "No hidden testcases configured" });
     }
 
-    let results = [];
+    let passed = 0;
+    const total = hiddenTestcases.length;
+    let finalVerdict = "Accepted";
+    let failedAt = -1;
+    let executionStats = { totalTime: 0, maxMemory: 0 };
 
-    for (let testcase of sampleTestcases) {
+    // Evaluate against hidden testcases
+    for (let [index, testcase] of hiddenTestcases.entries()) {
       // Parse input string into object
       let inputObj = parseInputString(testcase.input);
       let finalCode = sourceCode;
@@ -355,7 +436,6 @@ router.post("/run", userAuth, async (req, res) => {
           finalCode = buildCWrapper(sourceCode, inputObj);
           break;
         default:
-          // For unsupported languages, use raw code with stdin
           console.warn(
             `No wrapper for languageId: ${languageId}, using raw code`,
           );
@@ -378,55 +458,85 @@ router.post("/run", userAuth, async (req, res) => {
       const { status, stdout, stderr, time, memory } = judgeResponse.data;
       const statusId = status?.id;
 
-      // Handle execution errors
+      // Track stats
+      if (time) executionStats.totalTime += parseFloat(time);
+      if (memory)
+        executionStats.maxMemory = Math.max(executionStats.maxMemory, memory);
+
+      // Check for runtime/compilation errors
       if (statusId !== 3) {
-        // 3 = Accepted in Judge0
-        results.push({
-          input: testcase.input,
-          expectedOutput: testcase.output,
-          actualOutput: stderr || stdout?.trim() || "",
-          status: status?.description || "Unknown Error",
-          time: time || null,
-          memory: memory || null,
-        });
-        continue;
+        // Status 3 = Accepted in Judge0
+        finalVerdict = status.description || "Runtime Error";
+        failedAt = index;
+        break;
       }
 
       // Normalize and compare outputs
       const normalizedExpected = normalizeOutput(testcase.output);
       const normalizedActual = normalizeOutput(stdout?.trim() || "");
-      const isMatching = normalizedExpected === normalizedActual;
 
-      results.push({
-        input: testcase.input,
-        expectedOutput: testcase.output,
-        actualOutput: stdout?.trim() || "",
-        status: isMatching ? "Accepted" : "Wrong Answer",
-        time: time || null,
-        memory: memory || null,
-      });
+      if (normalizedExpected !== normalizedActual) {
+        finalVerdict = "Wrong Answer";
+        failedAt = index;
+        break;
+      }
+
+      passed++;
     }
 
-    res.json({
-      message: "Run completed",
+    // Final verdict check
+    if (passed !== total && finalVerdict === "Accepted") {
+      finalVerdict = "Wrong Answer";
+    }
+
+    // Calculate average time
+    const avgTime =
+      passed > 0 ? (executionStats.totalTime / passed).toFixed(3) : "0";
+
+    // Save submission to database
+    const submission = await Submission.create({
       userId: user._id,
-      results,
+      problemId,
+      sourceCode,
+      languageId,
+      verdict: finalVerdict,
+      passedTestcases: passed,
+      totalTestcases: total,
+      runtime: avgTime,
+    });
+
+    // Return detailed response
+    res.json({
+      success: true,
+      verdict: finalVerdict,
+      passedTestcases: passed,
+      totalTestcases: total,
+      stats: {
+        avgRuntime: `${avgTime}s`,
+        maxMemory: executionStats.maxMemory
+          ? `${executionStats.maxMemory} KB`
+          : "N/A",
+        failedAt: failedAt >= 0 ? failedAt + 1 : null, // 1-indexed for UI
+      },
+      submissionId: submission._id,
     });
   } catch (error) {
-    console.error("Run route error:", error);
+    console.error("Submission error:", error);
 
-    // Handle specific error types
+    // Handle specific errors
     if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
-      return res.status(504).json({ message: "Execution timed out" });
+      return res
+        .status(504)
+        .json({ message: "Submission timed out. Try again." });
     }
     if (error.response?.status === 429) {
       return res
         .status(429)
-        .json({ message: "Rate limit exceeded. Please wait." });
+        .json({ message: "Too many submissions. Please wait." });
     }
 
     res.status(500).json({
-      message: "Run failed",
+      message: "Submission failed",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }

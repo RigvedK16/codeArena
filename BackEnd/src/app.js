@@ -31,7 +31,7 @@ app.use(
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("Not allowed by CORS"));
     },
-  })
+  }),
 );
 // middleware
 
@@ -46,9 +46,12 @@ const runRouter = require("./routes/run");
 const problemsRouter = require("./routes/problems");
 const contestsRouter = require("./routes/contests");
 const chatRouter = require("./routes/chat");
+const submitRouter = require("./routes/submit");
+const usersRouter = require("./routes/users");
 
 app.use("/", authRouter);
 app.use("/code", runRouter);
+app.use("/code", submitRouter);
 app.use("/groups", groupsRouter);
 app.use("/problems", problemsRouter);
 app.use("/contests", contestsRouter);
@@ -66,6 +69,7 @@ app.use((err, req, res, next) => {
   });
 });
 
+app.use("/users", usersRouter);
 // connect DB then start server
 connectDB()
   .then(() => {

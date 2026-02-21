@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { api } from "../utils/api";
 
 function getPhase(startTime, endTime) {
@@ -22,11 +22,17 @@ function formatCountdown(ms) {
 
 export default function ContestDashboard() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [contest, setContest] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
+
+  const [registering, setRegistering] = useState(false);
+
+  const [solvePopup, setSolvePopup] = useState(null);
 
   const fetchContest = async () => {
     const res = await api(`/contests/${id}`);
@@ -56,6 +62,25 @@ export default function ContestDashboard() {
     refreshAll();
   }, [id]);
 
+  // If navigated from an auto-submit, scroll to leaderboard.
+  useEffect(() => {
+    if (location.hash !== "#leaderboard") return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        // Re-fetch once to ensure latest standings after auto-submit navigation.
+        const lb = await fetchLeaderboard();
+        if (!cancelled) setLeaderboard(lb);
+      } catch {
+        // ignore
+      }
+
+      const el = document.getElementById("leaderboard");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [location.hash, loading]);
+
   // Countdown tick
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 1000);
@@ -66,6 +91,74 @@ export default function ContestDashboard() {
     if (!contest) return null;
     return getPhase(contest.startTime, contest.endTime);
   }, [contest, nowMs]);
+
+  const canSolve = useMemo(() => {
+    if (!contest) return false;
+    return phase === "Live" && Boolean(contest.isRegistered);
+  }, [contest, phase]);
+
+  const handleRegister = async () => {
+    try {
+      setRegistering(true);
+      await api(`/contests/${id}/register`, { method: "POST" });
+      await refreshAll();
+    } catch (err) {
+      alert(err.message || "Registration failed");
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const openSolvePopup = (problem) => {
+    setSolvePopup({
+      problemId: problem.problemId?._id || problem.problemId,
+      title: problem.problemId?.title || "Problem",
+    });
+  };
+
+  const requestFullscreen = async () => {
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) return await el.requestFullscreen();
+      if (el.webkitRequestFullscreen) return await el.webkitRequestFullscreen();
+      if (el.mozRequestFullScreen) return await el.mozRequestFullScreen();
+      if (el.msRequestFullscreen) return await el.msRequestFullscreen();
+    } catch {
+      // ignore; problem view will force re-entry overlay
+    }
+  };
+
+  const getIsInFullscreen = () =>
+    Boolean(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement,
+    );
+
+  const confirmSolve = async () => {
+    if (!solvePopup?.problemId || !contest?._id) return;
+    await requestFullscreen();
+    if (!getIsInFullscreen()) {
+      alert(
+        "Fullscreen is required to start solving. Please allow fullscreen and try again.",
+      );
+      return;
+    }
+
+    // Start the 60-min timer exactly when the user clicks Start Solving.
+    const startRes = await api(`/contests/${contest._id}/start-problem`, {
+      method: "POST",
+      body: { problemId: solvePopup.problemId },
+    });
+
+    navigate(
+      `/problems/${solvePopup.problemId}?contestId=${contest._id}&fs=1`,
+      {
+        state: { contestSolve: startRes?.data || null },
+      },
+    );
+  };
 
   // Poll leaderboard while Live
   useEffect(() => {
@@ -133,8 +226,12 @@ export default function ContestDashboard() {
     return (
       <div className="min-h-screen bg-gray-50 pt-20 pb-12 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-600 text-lg mb-4">{error || "Contest not found"}</p>
-          <Link to="/contests" className="btn btn-primary">Back to Contests</Link>
+          <p className="text-red-600 text-lg mb-4">
+            {error || "Contest not found"}
+          </p>
+          <Link to="/contests" className="btn btn-primary">
+            Back to Contests
+          </Link>
         </div>
       </div>
     );
@@ -142,14 +239,89 @@ export default function ContestDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 pb-12">
+      {solvePopup ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div className="min-w-0">
+                <div className="text-xs text-gray-500">Before you start</div>
+                <div className="text-lg font-bold text-gray-900 truncate">
+                  {solvePopup.title}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost text-gray-500"
+                onClick={() => setSolvePopup(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-700 space-y-2">
+              <div className="font-semibold text-gray-900">Rules</div>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>You have 60 minutes once you start solving.</li>
+                <li>Submit within 60 minutes, otherwise it auto-submits.</li>
+                <li>Leaving the page may prevent auto-submit.</li>
+              </ul>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setSolvePopup(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={confirmSolve}
+              >
+                Start Solving
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <Link to="/contests" className="text-sm text-gray-500 hover:text-emerald-600">← Back to Contests</Link>
-            <h1 className="text-3xl font-bold text-gray-900 truncate mt-1">{contest.title}</h1>
-            {contest.description ? <p className="text-gray-600 mt-1">{contest.description}</p> : null}
+            <Link
+              to="/contests"
+              className="text-sm text-gray-500 hover:text-emerald-600"
+            >
+              ← Back to Contests
+            </Link>
+            <h1 className="text-3xl font-bold text-gray-900 truncate mt-1">
+              {contest.title}
+            </h1>
+            {contest.description ? (
+              <p className="text-gray-600 mt-1">{contest.description}</p>
+            ) : null}
           </div>
-          <button onClick={refreshAll} className="btn btn-outline">Refresh</button>
+          <div className="flex items-center gap-2">
+            {phase === "Live" && !contest.isRegistered ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={registering}
+                onClick={handleRegister}
+                title="Register to unlock solving"
+              >
+                {registering ? "Registering..." : "Register"}
+              </button>
+            ) : null}
+            <button
+              onClick={refreshAll}
+              className="btn btn-outline border-gray-300 text-gray-900 hover:bg-gray-100"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Countdown + Phase */}
@@ -158,10 +330,17 @@ export default function ContestDashboard() {
             <div>
               <div className="text-xs text-gray-500">Status</div>
               <div className="text-lg font-semibold text-gray-900">{phase}</div>
+              {phase === "Live" && !contest.isRegistered ? (
+                <div className="mt-1 text-xs text-amber-700">
+                  You must register to solve contest problems.
+                </div>
+              ) : null}
             </div>
             <div className="text-center md:text-right">
               <div className="text-xs text-gray-500">{countdownLabel}</div>
-              <div className="font-mono text-3xl font-bold text-emerald-600">{countdownValue}</div>
+              <div className="font-mono text-3xl font-bold text-emerald-600">
+                {countdownValue}
+              </div>
             </div>
           </div>
         </div>
@@ -174,18 +353,63 @@ export default function ContestDashboard() {
 
               <div className="space-y-3">
                 {(contest.problems || []).map((p) => (
-                  <div key={p.problemId?._id || p.problemId} className="p-4 rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors">
+                  <div
+                    key={p.problemId?._id || p.problemId}
+                    role={canSolve ? "button" : undefined}
+                    tabIndex={canSolve ? 0 : undefined}
+                    onClick={canSolve ? () => openSolvePopup(p) : undefined}
+                    onKeyDown={
+                      canSolve
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openSolvePopup(p);
+                            }
+                          }
+                        : undefined
+                    }
+                    className={
+                      canSolve
+                        ? "p-4 rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors cursor-pointer"
+                        : "p-4 rounded-xl border border-gray-200 transition-colors"
+                    }
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-gray-900 truncate">{p.problemId?.title || "Problem"}</div>
-                        <div className="text-xs text-gray-500 mt-1">Points: {p.pointValue}</div>
+                        <div className="text-sm font-semibold text-gray-900 truncate">
+                          {p.problemId?.title || "Problem"}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Points: {p.pointValue}
+                        </div>
                       </div>
-                      <Link
-                        to={`/problems/${p.problemId?._id || p.problemId}?contestId=${contest._id}`}
-                        className="btn btn-sm btn-outline"
-                      >
-                        Solve
-                      </Link>
+                      {canSolve ? (
+                        <button
+                          type="button"
+                          className="btn btn-sm border-emerald-600 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openSolvePopup(p);
+                          }}
+                        >
+                          Solve
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-sm border-gray-300 text-gray-500 opacity-70 cursor-not-allowed"
+                          disabled
+                          title={
+                            phase !== "Live"
+                              ? phase === "Upcoming"
+                                ? "Contest has not started yet"
+                                : "Contest has ended"
+                              : "Register to solve contest problems"
+                          }
+                        >
+                          Solve
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -194,27 +418,37 @@ export default function ContestDashboard() {
           </div>
 
           {/* Leaderboard */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2" id="leaderboard">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-900">Live Leaderboard</h2>
-                <div className="text-xs text-gray-500">Sorted by score ↓, penalty ↑</div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  Live Leaderboard
+                </h2>
+                <div className="text-xs text-gray-500">
+                  Sorted by score ↓, penalty ↑
+                </div>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="table w-full">
-                  <thead>
+                <table className="table w-full text-gray-900">
+                  <thead className="bg-gray-50 text-gray-700">
                     <tr>
                       <th>Rank</th>
                       <th>User</th>
                       <th className="text-right">Score</th>
+                      <th className="text-right">Time Taken</th>
                       <th className="text-right">Penalty</th>
                     </tr>
                   </thead>
                   <tbody>
                     {leaderboard.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="text-center text-gray-500 py-10">No participants yet</td>
+                        <td
+                          colSpan={5}
+                          className="text-center text-gray-500 py-10"
+                        >
+                          No participants yet
+                        </td>
                       </tr>
                     ) : (
                       leaderboard.map((row, idx) => (
@@ -222,12 +456,23 @@ export default function ContestDashboard() {
                           <td className="font-medium">{idx + 1}</td>
                           <td>
                             <div className="font-medium text-gray-900">
-                              {row.user ? `${row.user.firstName || ""} ${row.user.lastName || ""}`.trim() : "Unknown"}
+                              {row.user
+                                ? `${row.user.firstName || ""} ${row.user.lastName || ""}`.trim()
+                                : "Unknown"}
                             </div>
-                            {row.user?.emailId ? <div className="text-xs text-gray-500">{row.user.emailId}</div> : null}
+                            {row.user?.emailId ? (
+                              <div className="text-xs text-gray-500">
+                                {row.user.emailId}
+                              </div>
+                            ) : null}
                           </td>
-                          <td className="text-right font-semibold text-emerald-700">{row.totalScore}</td>
-                          <td className="text-right font-mono text-gray-700">{row.totalPenaltyTime}</td>
+                          <td className="text-right font-semibold text-emerald-700">
+                            {row.totalScore}
+                          </td>
+                          <td className="text-right font-mono text-gray-700">{`${row.totalTimeTaken ?? 0}mins`}</td>
+                          <td className="text-right font-mono text-gray-700">
+                            {row.totalPenaltyTime}
+                          </td>
                         </tr>
                       ))
                     )}

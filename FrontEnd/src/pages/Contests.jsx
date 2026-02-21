@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../utils/api";
 
-function getContestStatus(contest) {
-  const now = Date.now();
+function getContestStatus(contest, now) {
   const start = new Date(contest.startTime).getTime();
   const end = new Date(contest.endTime).getTime();
   if (now < start) return "Upcoming";
@@ -23,6 +22,8 @@ export default function Contests() {
   const [contests, setContests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [registeringId, setRegisteringId] = useState(null);
+  const [nowMs, setNowMs] = useState(Date.now());
 
   const fetchContests = async () => {
     try {
@@ -41,13 +42,36 @@ export default function Contests() {
     fetchContests();
   }, []);
 
+  // Keep statuses (Upcoming/Live/Past) fresh without manual refresh.
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  const handleRegister = async (contestId) => {
+    try {
+      setRegisteringId(contestId);
+      await api(`/contests/${contestId}/register`, { method: "POST" });
+      await fetchContests();
+    } catch (err) {
+      alert(err.message || "Registration failed");
+    } finally {
+      setRegisteringId(null);
+    }
+  };
+
   const contestsWithStatus = useMemo(() => {
-    return (contests || []).map((c) => ({ ...c, status: getContestStatus(c) }));
-  }, [contests]);
+    return (contests || []).map((c) => ({
+      ...c,
+      status: getContestStatus(c, nowMs),
+    }));
+  }, [contests, nowMs]);
 
   const statusBadgeClass = (status) => {
-    if (status === "Live") return "bg-emerald-100 text-emerald-700 border-emerald-200";
-    if (status === "Upcoming") return "bg-cyan-100 text-cyan-700 border-cyan-200";
+    if (status === "Live")
+      return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    if (status === "Upcoming")
+      return "bg-cyan-100 text-cyan-700 border-cyan-200";
     return "bg-gray-100 text-gray-700 border-gray-200";
   };
 
@@ -56,10 +80,16 @@ export default function Contests() {
       <div className="container mx-auto px-4">
         <div className="flex items-start justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Contests</h1>
-            <p className="text-gray-600">Compete live, climb the leaderboard.</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+              Contests
+            </h1>
+            <p className="text-gray-600">
+              Compete live, climb the leaderboard.
+            </p>
           </div>
-          <button onClick={fetchContests} className="btn btn-outline">Refresh</button>
+          <button onClick={fetchContests} className="btn btn-outline">
+            Refresh
+          </button>
         </div>
 
         {loading ? (
@@ -74,7 +104,9 @@ export default function Contests() {
         ) : error ? (
           <div className="text-center py-12">
             <p className="text-red-600 text-lg">{error}</p>
-            <button onClick={fetchContests} className="btn btn-primary mt-4">Retry</button>
+            <button onClick={fetchContests} className="btn btn-primary mt-4">
+              Retry
+            </button>
           </div>
         ) : contestsWithStatus.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-2xl border border-gray-200">
@@ -82,42 +114,120 @@ export default function Contests() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {contestsWithStatus.map((contest) => (
-              <Link
-                key={contest._id}
-                to={`/contests/${contest._id}`}
-                className="block bg-white rounded-2xl shadow-sm border border-gray-200 hover:shadow-md hover:border-emerald-300 transition-all"
-              >
-                <div className="p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusBadgeClass(contest.status)}`}>
-                        {contest.status}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {contest.problemsCount || 0} problems • {contest.participantsCount || 0} participants
-                      </span>
+            {contestsWithStatus.map((contest) => {
+              const card = (
+                <div
+                  className={
+                    contest.status === "Live"
+                      ? "block bg-white rounded-2xl shadow-sm border border-gray-200 hover:shadow-md hover:border-emerald-300 transition-all"
+                      : "block bg-white rounded-2xl shadow-sm border border-gray-200 opacity-80"
+                  }
+                >
+                  <div className="p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusBadgeClass(contest.status)}`}
+                        >
+                          {contest.status}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {contest.problemsCount || 0} problems •{" "}
+                          {contest.participantsCount || 0} participants
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 truncate">
+                        {contest.title}
+                      </h3>
+                      {contest.description ? (
+                        <p className="text-gray-600 text-sm mt-1 line-clamp-2">
+                          {contest.description}
+                        </p>
+                      ) : null}
+                      <div className="text-xs text-gray-500 mt-3">
+                        <span className="font-medium">Start:</span>{" "}
+                        {formatDateTime(contest.startTime)}
+                        <span className="mx-2">•</span>
+                        <span className="font-medium">End:</span>{" "}
+                        {formatDateTime(contest.endTime)}
+                      </div>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 truncate">{contest.title}</h3>
-                    {contest.description ? (
-                      <p className="text-gray-600 text-sm mt-1 line-clamp-2">{contest.description}</p>
-                    ) : null}
-                    <div className="text-xs text-gray-500 mt-3">
-                      <span className="font-medium">Start:</span> {formatDateTime(contest.startTime)}
-                      <span className="mx-2">•</span>
-                      <span className="font-medium">End:</span> {formatDateTime(contest.endTime)}
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 text-gray-400">
-                    <span className="text-sm font-medium text-emerald-600">Open</span>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <div className="flex items-center gap-2">
+                      {contest.status === "Live" ? (
+                        contest.isRegistered ? (
+                          <Link
+                            to={`/contests/${contest._id}`}
+                            className="btn btn-primary"
+                            title="Open live contest"
+                          >
+                            Open
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={registeringId === contest._id}
+                            onClick={() => handleRegister(contest._id)}
+                            title="Register to join this contest"
+                          >
+                            {registeringId === contest._id
+                              ? "Registering..."
+                              : "Register"}
+                          </button>
+                        )
+                      ) : contest.status === "Upcoming" ? (
+                        contest.isRegistered ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="btn btn-outline opacity-80"
+                            title="You are registered"
+                          >
+                            Registered
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={registeringId === contest._id}
+                            onClick={() => handleRegister(contest._id)}
+                          >
+                            {registeringId === contest._id
+                              ? "Registering..."
+                              : "Register"}
+                          </button>
+                        )
+                      ) : (
+                        <span className="text-sm font-medium text-gray-500">
+                          Closed
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </Link>
-            ))}
+              );
+
+              return (
+                <div
+                  key={contest._id}
+                  className={
+                    contest.status === "Past"
+                      ? "cursor-not-allowed"
+                      : "cursor-default"
+                  }
+                  title={
+                    contest.status === "Past"
+                      ? "Contest has ended"
+                      : contest.status === "Upcoming"
+                        ? "Contest is not live yet"
+                        : ""
+                  }
+                >
+                  {card}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

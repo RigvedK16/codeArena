@@ -34,7 +34,6 @@
 
 // export default App;
 
-
 // App.jsx
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
@@ -45,8 +44,12 @@ import Problems from "./pages/Problems.jsx"; // 👈 Import new page
 // import Dashboard from "./pages/Dashboard.jsx";
 import ProblemDetail from "./pages/ProblemDetail.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
+import RequireAdmin from "./components/RequireAdmin.jsx";
 import Contests from "./pages/Contests.jsx";
 import ContestDashboard from "./pages/ContestDashboard.jsx";
+import Leaderboard from "./pages/Leaderboard.jsx";
+import UploadProblems from "./pages/UploadProblems.jsx";
+import CreateContest from "./pages/CreateContest.jsx";
 
 function App() {
   return (
@@ -90,9 +93,52 @@ function App() {
             </RequireAuth>
           }
         />
-        <Route path="/leaderboard" element={<div className="pt-24 text-center text-2xl">🏆 Leaderboard Coming Soon</div>} />
-        <Route path="/practice" element={<div className="pt-24 text-center text-2xl">📚 Practice Mode Coming Soon</div>} />
-        <Route path="/dashboard" element={<div className="pt-24 text-center text-2xl">👤 Dashboard Coming Soon</div>} />
+        <Route
+          path="/leaderboard"
+          element={
+            <RequireAuth>
+              <Leaderboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/practice"
+          element={
+            <div className="pt-24 text-center text-2xl">
+              📚 Practice Mode Coming Soon
+            </div>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <div className="pt-24 text-center text-2xl">
+              👤 Dashboard Coming Soon
+            </div>
+          }
+        />
+
+        <Route
+          path="/upload-problems"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <UploadProblems />
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/create-contest"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <CreateContest />
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
 
         <Route
           path="*"
@@ -100,7 +146,9 @@ function App() {
             <div className="min-h-[60vh] grid place-items-center p-6 pt-24">
               <div className="text-center">
                 <h1 className="text-2xl font-bold">404 - Page not found</h1>
-                <Link to="/" className="btn btn-primary mt-4">Go Home</Link>
+                <Link to="/" className="btn btn-primary mt-4">
+                  Go Home
+                </Link>
               </div>
             </div>
           }

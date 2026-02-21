@@ -28,6 +28,11 @@ const participantProblemStatSchema = new mongoose.Schema(
       enum: ["unsolved", "attempted", "solved"],
       default: "unsolved",
     },
+    // When the user started solving this problem in the contest.
+    startedAt: {
+      type: Date,
+      default: null,
+    },
     // minutes from contest start, Math.floor-based
     solvedAtDuration: {
       type: Number,
@@ -59,6 +64,15 @@ const participantSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+    fullscreenViolations: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    lastFullscreenViolationAt: {
+      type: Date,
+      default: null,
     },
     problemStats: {
       type: [participantProblemStatSchema],
