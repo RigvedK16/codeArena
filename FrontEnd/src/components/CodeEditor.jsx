@@ -188,8 +188,8 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
                                 <div
                                     key={index}
                                     className={`p-4 border-b border-gray-100 transition-colors ${isPassed
-                                            ? "bg-emerald-50/60 hover:bg-emerald-50"
-                                            : "bg-red-50/40 hover:bg-red-50/60"
+                                        ? "bg-emerald-50/60 hover:bg-emerald-50"
+                                        : "bg-red-50/40 hover:bg-red-50/60"
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-3">
@@ -201,8 +201,8 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
                                         </div>
                                         <span
                                             className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${isPassed
-                                                    ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                                                    : "bg-red-100 text-red-700 border-red-200"
+                                                ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                                                : "bg-red-100 text-red-700 border-red-200"
                                                 }`}
                                         >
                                             {result.status}
@@ -234,17 +234,21 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
                                         </div>
 
                                         {/* Actual Output (only if failed) */}
-                                        {!isPassed && result.actualOutput !== undefined && (
-                                            <div>
-                                                <div className="flex items-center gap-2 mb-1.5">
-                                                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Your Output</span>
-                                                    <span className="text-xs text-red-600 font-medium">result</span>
-                                                </div>
-                                                <pre className="bg-red-50 border border-red-200 text-red-900 p-3 rounded-lg text-xs font-mono overflow-x-auto leading-relaxed">
-                                                    {result.actualOutput || <span className="text-red-400 italic">(empty)</span>}
-                                                </pre>
+                                        {/* Your Output */}
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-1.5">
+                                                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Your Output</span>
+                                                <span className={`text-xs font-medium ${isPassed ? "text-emerald-600" : "text-red-600"}`}>
+                                                    result
+                                                </span>
                                             </div>
-                                        )}
+                                            <pre className={`p-3 rounded-lg text-xs font-mono overflow-x-auto leading-relaxed ${isPassed
+                                                    ? "bg-emerald-50 border border-emerald-200 text-emerald-900"
+                                                    : "bg-red-50 border border-red-200 text-red-900"
+                                                }`}>
+                                                {result.actualOutput || <span className={`${isPassed ? "text-emerald-400" : "text-red-400"} italic`}>(empty)</span>}
+                                            </pre>
+                                        </div>
 
                                         {/* Error/Status Info */}
                                         {result.status !== "Accepted" && result.status !== "Wrong Answer" && (
