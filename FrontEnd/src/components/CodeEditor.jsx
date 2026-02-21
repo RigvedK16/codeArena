@@ -62,7 +62,7 @@ int main() {
 `,
 };
 
-export default function CodeEditor({ problemId, onRun, running, results }) {
+export default function CodeEditor({ problemId, onRun, running, results, onChange, onClearResults }) {
 
     const [languageId, setLanguageId] = useState(71);
     const [sourceCode, setSourceCode] = useState("");
@@ -76,6 +76,12 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
             setSourceCode(CODE_TEMPLATES[languageId]);
         }
     }, [languageId]);
+
+    useEffect(() => {
+        if (typeof onChange === "function") {
+            onChange({ sourceCode, languageId });
+        }
+    }, [sourceCode, languageId, onChange]);
 
     const handleRun = () => {
         if (!sourceCode.trim()) {
@@ -160,15 +166,12 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
             </div>
 
             {/* Results */}
-            // Replace the entire Results section in CodeEditor.jsx with this:
-
-            {/* Results */}
             {results && results.length > 0 && (
                 <div className="border-t border-gray-200">
                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                         <h4 className="font-semibold text-gray-800">Test Results</h4>
                         <button
-                            onClick={() => setResults(null)}
+                            onClick={() => onClearResults?.()}
                             className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
                         >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

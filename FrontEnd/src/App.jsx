@@ -44,6 +44,8 @@ import Login from "./pages/Login.jsx";
 import Problems from "./pages/Problems.jsx"; // 👈 Import new page
 // import Dashboard from "./pages/Dashboard.jsx";
 import ProblemDetail from "./pages/ProblemDetail.jsx";
+import Contests from "./pages/Contests.jsx";
+import ContestDashboard from "./pages/ContestDashboard.jsx";
 
 function App() {
   return (
@@ -57,7 +59,8 @@ function App() {
         <Route path="/problems/:id" element={<ProblemDetail />} />
 
         {/* Placeholder routes for future features */}
-        <Route path="/contests" element={<div className="pt-24 text-center text-2xl">🚧 Contests Page Coming Soon</div>} />
+        <Route path="/contests" element={<Contests />} />
+        <Route path="/contests/:id" element={<ContestDashboard />} />
         <Route path="/leaderboard" element={<div className="pt-24 text-center text-2xl">🏆 Leaderboard Coming Soon</div>} />
         <Route path="/practice" element={<div className="pt-24 text-center text-2xl">📚 Practice Mode Coming Soon</div>} />
         <Route path="/dashboard" element={<div className="pt-24 text-center text-2xl">👤 Dashboard Coming Soon</div>} />
