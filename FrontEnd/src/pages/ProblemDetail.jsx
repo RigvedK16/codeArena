@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { api } from "../utils/api";
-import CodeEditor, { LANGUAGES } from "../components/CodeEditor";
+import CodeEditor from "../components/CodeEditor";
 
 export default function ProblemDetail() {
     const { id } = useParams();

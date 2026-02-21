@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
+import { useSelector } from "react-redux";
 import Editor from "react-simple-code-editor";
 import Prism from "prismjs";
+import { api } from "../utils/api";
 
 import "prismjs/components/prism-clike";
 import "prismjs/components/prism-c";
@@ -11,7 +13,7 @@ import "prismjs/components/prism-javascript";
 import "prismjs/themes/prism-tomorrow.css";
 
 // Judge0 Language IDs mapping
-export const LANGUAGES = [
+const LANGUAGES = [
     { id: 52, name: "C++ (GCC)" },
     { id: 48, name: "C (GCC)" },
     { id: 63, name: "JavaScript (Node.js)" },
@@ -68,7 +70,15 @@ export default function CodeEditor({ problemId, onRun, running, results, onChang
     const [sourceCode, setSourceCode] = useState("");
     const [isUserEditing, setIsUserEditing] = useState(false);
 
-    const textareaRef = useRef(null);
+    const user = useSelector((state) => state.auth.user);
+
+    const [duckOpen, setDuckOpen] = useState(false);
+    const [duckInput, setDuckInput] = useState("");
+    const [duckThinking, setDuckThinking] = useState(false);
+    const [chatHistory, setChatHistory] = useState([]);
+    const chatEndRef = useRef(null);
+
+    // const textareaRef = useRef(null);
 
     // Load template on language change (only if user hasn't edited)
     useEffect(() => {
@@ -77,11 +87,13 @@ export default function CodeEditor({ problemId, onRun, running, results, onChang
         }
     }, [languageId]);
 
+    // 🚀 FIXED INFINITE LOOP HERE
     useEffect(() => {
         if (typeof onChange === "function") {
             onChange({ sourceCode, languageId });
         }
-    }, [sourceCode, languageId, onChange]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sourceCode, languageId]); 
 
     const handleRun = () => {
         if (!sourceCode.trim()) {
@@ -91,11 +103,59 @@ export default function CodeEditor({ problemId, onRun, running, results, onChang
         onRun({ sourceCode, languageId });
     };
 
+    const scrollChatToBottom = () => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        if (!duckOpen) return;
+        scrollChatToBottom();
+    }, [duckOpen, chatHistory, duckThinking]);
+
+    const sendDuckMessage = async () => {
+        const message = duckInput.trim();
+        if (!message) return;
+        if (!problemId) {
+            alert("Problem context missing");
+            return;
+        }
+
+        setDuckInput("");
+        setDuckThinking(true);
+
+        setChatHistory((prev) => [...prev, { role: "user", message }]);
+
+        try {
+            const response = await api("/api/chat/duck", {
+                method: "POST",
+                body: {
+                    userId: user?._id,
+                    problemId,
+                    code: sourceCode,
+                    message,
+                },
+            });
+
+            if (Array.isArray(response.chatHistory)) {
+                setChatHistory(response.chatHistory);
+            } else {
+                setChatHistory((prev) => [...prev, { role: "model", message: response.reply }]);
+            }
+        } catch (err) {
+            setChatHistory((prev) => [
+                ...prev,
+                { role: "model", message: err.message || "Duck is unavailable right now" },
+            ]);
+        } finally {
+            setDuckThinking(false);
+        }
+    };
+
     return (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
 
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200">
                 <div className="flex items-center gap-3">
                     <label className="text-sm font-medium text-gray-700">Language:</label>
 
@@ -115,17 +175,108 @@ export default function CodeEditor({ problemId, onRun, running, results, onChang
                     </select>
                 </div>
 
-                <button
-                    onClick={handleRun}
-                    disabled={running}
-                    className={`btn btn-sm px-6 ${running
-                        ? "btn-ghost text-gray-400"
-                        : "bg-emerald-500 hover:bg-emerald-600 text-white border-none"
-                        }`}
-                >
-                    {running ? "Running..." : "Run Code"}
-                </button>
+                <div className="ml-auto flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setDuckOpen(true)}
+                        className="btn btn-sm px-4 bg-white border border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                    >
+                        Ask Duck 🦆
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleRun}
+                        disabled={running}
+                        className={`btn btn-sm px-6 ${running
+                            ? "btn-ghost text-gray-400"
+                            : "bg-emerald-500 hover:bg-emerald-600 text-white border-none"
+                            }`}
+                    >
+                        {running ? "Running..." : "Run Code"}
+                    </button>
+                </div>
             </div>
+
+            {/* Duck Chat */}
+            {duckOpen && (
+                <div className="border-b border-gray-200 bg-white">
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                        <div>
+                            <h4 className="font-semibold text-gray-800">Rubber Duck AI</h4>
+                            <p className="text-xs text-gray-500">One question at a time.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setDuckOpen(false)}
+                            className="btn btn-sm btn-ghost text-gray-500 hover:text-gray-700"
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    <div className="p-4">
+                        <div className="max-h-56 overflow-y-auto space-y-3 pr-1">
+                            {chatHistory.length === 0 && (
+                                <div className="text-sm text-gray-500">
+                                    Tell the duck what you’re stuck on.
+                                </div>
+                            )}
+
+                            {chatHistory.map((m, idx) => {
+                                const isUser = m.role === "user";
+                                return (
+                                    <div key={idx} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                                        <div
+                                            className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm border whitespace-pre-wrap ${isUser
+                                                ? "bg-emerald-50 border-emerald-200 text-gray-900"
+                                                : "bg-white border-gray-200 text-gray-800"
+                                                }`}
+                                        >
+                                            {m.message}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {duckThinking && (
+                                <div className="flex justify-start">
+                                    <div className="max-w-[85%] rounded-2xl px-4 py-2 text-sm border bg-white border-gray-200 text-gray-500">
+                                        Duck is thinking...
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={chatEndRef} />
+                        </div>
+
+                        <form
+                            className="mt-3 flex items-center gap-2"
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                if (!duckThinking) sendDuckMessage();
+                            }}
+                        >
+                            <input
+                                value={duckInput}
+                                onChange={(e) => setDuckInput(e.target.value)}
+                                placeholder="Ask about your logic, edge cases, or errors…"
+                                className="input input-bordered input-sm flex-1 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                disabled={duckThinking}
+                            />
+                            <button
+                                type="submit"
+                                disabled={duckThinking || !duckInput.trim()}
+                                className={`btn btn-sm px-5 ${duckThinking
+                                    ? "btn-ghost text-gray-400"
+                                    : "bg-emerald-500 hover:bg-emerald-600 text-white border-none"
+                                    }`}
+                            >
+                                Send
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Editor */}
             <div className="flex h-[20rem] bg-gray-900 rounded-b-xl overflow-auto">

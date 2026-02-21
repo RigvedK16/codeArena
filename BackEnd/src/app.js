@@ -1,10 +1,22 @@
 const express = require("express");
+require("dotenv").config();
 const app = express();
 const connectDB = require("./config/databse");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+
 app.use(express.json());
 app.use(cookieParser());
+
+// ==========================================
+// 🕵️‍♂️ TRAP 1: THE GLOBAL SNIFFER
+// Placed before CORS to prove the request actually arrives
+// ==========================================
+app.use((req, res, next) => {
+  console.log(`[SNIFFER] ➡️  ${req.method} ${req.url} (Origin: ${req.headers.origin})`);
+  next();
+});
+
 // CORS: allow local dev origins and optional env override
 const allowedOrigins = [
   process.env.FRONTEND_ORIGIN || "http://localhost:5173",
@@ -33,12 +45,27 @@ const groupsRouter = require("./routes/groups");
 const runRouter = require("./routes/run");
 const problemsRouter = require("./routes/problems");
 const contestsRouter = require("./routes/contests");
+const chatRouter = require("./routes/chat");
 
 app.use("/", authRouter);
 app.use("/code", runRouter);
 app.use("/groups", groupsRouter);
 app.use("/problems", problemsRouter);
 app.use("/contests", contestsRouter);
+app.use("/api/chat", chatRouter);
+
+// ==========================================
+// 🚨 TRAP 2: THE GLOBAL ERROR CATCHER
+// Placed after all routes to catch silent crashes (like CORS)
+// ==========================================
+app.use((err, req, res, next) => {
+  console.error("🚨 GLOBAL EXPRESS ERROR CAUGHT:", err.message);
+  res.status(500).json({ 
+    success: false, 
+    message: "App.js Crash: " + err.message 
+  });
+});
+
 // connect DB then start server
 connectDB()
   .then(() => {
