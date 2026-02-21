@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+.code-editor {
+    min-height: 400px;
+    max-height: 400px;
+    overflow: auto;
+}
+
+.code-editor textarea {
+    min-height: 400px !important;
+    max-height: 400px !important;
+    overflow: auto !important;
+    white-space: pre !important;
+}
+
+.code-editor pre {
+    min-height: 400px !important;
+}

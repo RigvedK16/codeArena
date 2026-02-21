@@ -1,0 +1,35 @@
+{
+  "name": "rubix",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "nodemon src/app.js",
+    "start": "node src/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ar-p-it/Rubix1.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ar-p-it/Rubix1/issues"
+  },
+  "homepage": "https://github.com/ar-p-it/Rubix1#readme",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.13.5",
+    "bcrypt": "^6.0.0",
+    "cookie": "^1.1.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.21.0",
+    "nodemon": "^3.1.14",
+    "parser": "^0.1.4",
+    "qrcode.react": "^4.2.0",
+    "validator": "^13.15.26"
+  }
+}
