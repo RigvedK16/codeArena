@@ -85,8 +85,14 @@ const userSchema = new mongoose.Schema(
         ref: "Group",
       },
     ],
+
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 userSchema.index({ finternetWalletId: 1 }, { unique: true, sparse: true });

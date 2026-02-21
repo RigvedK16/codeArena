@@ -93,7 +93,6 @@
 //   );
 // }
 
-
 // components/Navbar.jsx
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
@@ -133,10 +132,11 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled
+      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        scrolled
           ? "bg-white/95 backdrop-blur-md shadow-lg border-b border-gray-200"
           : "bg-transparent"
-        }`}
+      }`}
     >
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
@@ -173,6 +173,14 @@ export default function Navbar() {
                 >
                   Dashboard
                 </Link>
+                {user?.role === "admin" && (
+                  <Link
+                    to="/upload-problems"
+                    className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
+                  >
+                    Upload Problems
+                  </Link>
+                )}
                 <div className="flex items-center gap-3">
                   {user?.photoUrl && (
                     <img
@@ -212,11 +220,26 @@ export default function Navbar() {
             className="md:hidden p-2 rounded-lg hover:bg-gray-100"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               {mobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               )}
             </svg>
           </button>
@@ -246,6 +269,15 @@ export default function Navbar() {
                   >
                     Dashboard
                   </Link>
+                  {user?.role === "admin" && (
+                    <Link
+                      to="/upload-problems"
+                      className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Upload Problems
+                    </Link>
+                  )}
                   <button
                     onClick={() => {
                       handleLogout();

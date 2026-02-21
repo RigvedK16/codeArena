@@ -55,8 +55,27 @@ const optionalUserAuth = async (req, resp, next) => {
     return next();
   }
 };
+
+// Requires an authenticated admin user.
+const adminAuth = async (req, resp, next) => {
+  return userAuth(req, resp, () => {
+    try {
+      if (req.user?.role !== "admin") {
+        return resp
+          .status(403)
+          .json({ success: false, message: "Admin access required" });
+      }
+      return next();
+    } catch (err) {
+      return resp
+        .status(500)
+        .json({ success: false, message: err?.message || "Server error" });
+    }
+  });
+};
 module.exports = {
   // adminAuth,
   userAuth,
   optionalUserAuth,
+  adminAuth,
 };
