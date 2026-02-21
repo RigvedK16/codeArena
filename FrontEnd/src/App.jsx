@@ -44,6 +44,7 @@ import Login from "./pages/Login.jsx";
 import Problems from "./pages/Problems.jsx"; // 👈 Import new page
 // import Dashboard from "./pages/Dashboard.jsx";
 import ProblemDetail from "./pages/ProblemDetail.jsx";
+import RequireAuth from "./components/RequireAuth.jsx";
 
 function App() {
   return (
@@ -53,11 +54,32 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/problems" element={<Problems />} /> {/* 👈 Add problems route */}
-        <Route path="/problems/:id" element={<ProblemDetail />} />
+        <Route
+          path="/problems"
+          element={
+            <RequireAuth>
+              <Problems />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/problems/:id"
+          element={
+            <RequireAuth>
+              <ProblemDetail />
+            </RequireAuth>
+          }
+        />
 
         {/* Placeholder routes for future features */}
-        <Route path="/contests" element={<div className="pt-24 text-center text-2xl">🚧 Contests Page Coming Soon</div>} />
+        <Route
+          path="/contests"
+          element={
+            <RequireAuth>
+              <div className="pt-24 text-center text-2xl">🚧 Contests Page Coming Soon</div>
+            </RequireAuth>
+          }
+        />
         <Route path="/leaderboard" element={<div className="pt-24 text-center text-2xl">🏆 Leaderboard Coming Soon</div>} />
         <Route path="/practice" element={<div className="pt-24 text-center text-2xl">📚 Practice Mode Coming Soon</div>} />
         <Route path="/dashboard" element={<div className="pt-24 text-center text-2xl">👤 Dashboard Coming Soon</div>} />

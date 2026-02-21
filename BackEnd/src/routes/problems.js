@@ -4,8 +4,8 @@ const router = express.Router();
 const Problem = require("../models/problem");
 const { userAuth } = require("../middleware/adminAuth");
 
-// GET all problems (public - for practice mode)
-router.get("/", async (req, res) => {
+// GET all problems (login required)
+router.get("/", userAuth, async (req, res) => {
     try {
         const { difficulty, tag, search } = req.query;
 
@@ -42,8 +42,8 @@ router.get("/", async (req, res) => {
     }
 });
 
-// GET single problem by ID (protected - for solving)
-router.get("/:id", async (req, res) => {
+// GET single problem by ID (login required)
+router.get("/:id", userAuth, async (req, res) => {
     try {
         const problem = await Problem.findById(req.params.id);
 

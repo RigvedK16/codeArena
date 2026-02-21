@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { api } from "../utils/api";
 import { useDispatch } from "react-redux";
@@ -10,6 +10,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   const submit = async (e) => {
     e.preventDefault();
@@ -21,7 +22,8 @@ export default function Login() {
         body: { emailId, password },
       });
       dispatch(setUser(response.user));
-      navigate("/dashboard");
+      const redirectTo = location.state?.from?.pathname || "/dashboard";
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err.message || "Login failed");
     } finally {
