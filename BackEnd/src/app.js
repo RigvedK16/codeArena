@@ -33,9 +33,12 @@ const groupsRouter = require("./routes/groups");
 const runRouter = require("./routes/run");
 const problemsRouter = require("./routes/problems");
 const contestsRouter = require("./routes/contests");
+const submitRouter = require("./routes/submit");
+
 
 app.use("/", authRouter);
 app.use("/code", runRouter);
+app.use("/code", submitRouter);
 app.use("/groups", groupsRouter);
 app.use("/problems", problemsRouter);
 app.use("/contests", contestsRouter);
