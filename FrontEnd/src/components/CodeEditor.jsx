@@ -62,7 +62,7 @@ int main() {
 `,
 };
 
-export default function CodeEditor({ problemId, onRun, running, results }) {
+export default function CodeEditor({ problemId, onRun, running, results, onChange, onClearResults }) {
 
     const [languageId, setLanguageId] = useState(71);
     const [sourceCode, setSourceCode] = useState("");
@@ -76,6 +76,12 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
             setSourceCode(CODE_TEMPLATES[languageId]);
         }
     }, [languageId]);
+
+    useEffect(() => {
+        if (typeof onChange === "function") {
+            onChange({ sourceCode, languageId });
+        }
+    }, [sourceCode, languageId, onChange]);
 
     const handleRun = () => {
         if (!sourceCode.trim()) {
@@ -122,45 +128,45 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
             </div>
 
             {/* Editor */}
-            <div className="relative">
-                <Editor
-                    value={sourceCode}
-                    onValueChange={(code) => {
-                        setSourceCode(code);
-                        setIsUserEditing(true);
-                    }}
-                    highlight={(code) => {
-                        const langMap = {
-                            71: Prism.languages.python,
-                            62: Prism.languages.java,
-                            52: Prism.languages.cpp,
-                            48: Prism.languages.c,
-                            63: Prism.languages.javascript,
-                        };
-
-                        return Prism.highlight(
-                            code,
-                            langMap[languageId] || Prism.languages.clike,
-                            "javascript"
-                        );
-                    }}
-                    padding={16}
-                    className="font-mono text-sm bg-gray-900 text-gray-100 min-h-[20rem] rounded-b-xl"
-                    style={{ fontFamily: "'Fira Code', monospace", fontSize: 14 }}
-                />
-
-                {/* Line Numbers */}
-                <div className="absolute left-0 top-0 bottom-0 w-10 bg-gray-800 text-gray-500 text-xs py-4 px-2 text-right select-none border-r border-gray-700">
+            <div className="flex h-[20rem] bg-gray-900 rounded-b-xl overflow-auto">
+                {/* Line Numbers (scrolls with editor) */}
+                <div className="shrink-0 w-10 bg-gray-800 text-gray-500 text-xs py-4 px-2 text-right select-none border-r border-gray-700">
                     {sourceCode.split("\n").map((_, i) => (
                         <div key={i} className="leading-6">
                             {i + 1}
                         </div>
                     ))}
                 </div>
-            </div>
 
-            {/* Results */}
-            // Replace the entire Results section in CodeEditor.jsx with this:
+                {/* Code */}
+                <div className="flex-1 min-w-0">
+                    <Editor
+                        value={sourceCode}
+                        onValueChange={(code) => {
+                            setSourceCode(code);
+                            setIsUserEditing(true);
+                        }}
+                        highlight={(code) => {
+                            const langMap = {
+                                71: Prism.languages.python,
+                                62: Prism.languages.java,
+                                52: Prism.languages.cpp,
+                                48: Prism.languages.c,
+                                63: Prism.languages.javascript,
+                            };
+
+                            return Prism.highlight(
+                                code,
+                                langMap[languageId] || Prism.languages.clike,
+                                "javascript"
+                            );
+                        }}
+                        padding={16}
+                        className="font-mono text-sm text-gray-100"
+                        style={{ fontFamily: "'Fira Code', monospace", fontSize: 14, minHeight: "100%" }}
+                    />
+                </div>
+            </div>
 
             {/* Results */}
             {results && results.length > 0 && (
@@ -168,7 +174,7 @@ export default function CodeEditor({ problemId, onRun, running, results }) {
                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                         <h4 className="font-semibold text-gray-800">Test Results</h4>
                         <button
-                            onClick={() => setResults(null)}
+                            onClick={() => onClearResults?.()}
                             className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
                         >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -32,11 +32,13 @@ const authRouter = require("./routes/auth");
 const groupsRouter = require("./routes/groups");
 const runRouter = require("./routes/run");
 const problemsRouter = require("./routes/problems");
+const contestsRouter = require("./routes/contests");
 
 app.use("/", authRouter);
 app.use("/code", runRouter);
 app.use("/groups", groupsRouter);
 app.use("/problems", problemsRouter);
+app.use("/contests", contestsRouter);
 // connect DB then start server
 connectDB()
   .then(() => {

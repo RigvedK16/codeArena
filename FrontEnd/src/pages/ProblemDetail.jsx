@@ -1,6 +1,6 @@
 // pages/ProblemDetail.jsx
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { api } from "../utils/api";
 import CodeEditor, { LANGUAGES } from "../components/CodeEditor";
@@ -8,7 +8,10 @@ import CodeEditor, { LANGUAGES } from "../components/CodeEditor";
 export default function ProblemDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { isAuthenticated, user } = useSelector((state) => state.auth);
+
+    const contestId = new URLSearchParams(location.search).get("contestId");
 
     const [problem, setProblem] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -16,6 +19,7 @@ export default function ProblemDetail() {
     const [running, setRunning] = useState(false);
     const [results, setResults] = useState(null);
     const [activeTab, setActiveTab] = useState("description");
+    const [editorState, setEditorState] = useState({ sourceCode: "", languageId: 71 });
 
     useEffect(() => {
         fetchProblem();
@@ -62,6 +66,40 @@ export default function ProblemDetail() {
             setError(err.message || "Failed to run code");
         } finally {
             setRunning(false);
+        }
+    };
+
+    const handleContestSubmit = async () => {
+        if (!contestId) {
+            alert("Submission feature coming soon!");
+            return;
+        }
+        if (!isAuthenticated) {
+            alert("Please login to submit");
+            navigate("/login");
+            return;
+        }
+        if (!editorState.sourceCode?.trim()) {
+            alert("Please write some code first!");
+            return;
+        }
+
+        try {
+            const res = await api(`/contests/${contestId}/submit`, {
+                method: "POST",
+                body: {
+                    problemId: id,
+                    code: editorState.sourceCode,
+                    languageId: editorState.languageId,
+                },
+            });
+
+            window.dispatchEvent(
+                new CustomEvent("contest:submission", { detail: { contestId } })
+            );
+            alert(`Contest Submission: ${res.status}`);
+        } catch (err) {
+            alert(err.message || "Failed to submit");
         }
     };
 
@@ -254,15 +292,17 @@ export default function ProblemDetail() {
                             onRun={handleRun}
                             running={running}
                             results={results}
+                            onClearResults={() => setResults(null)}
+                            onChange={({ sourceCode, languageId }) => setEditorState({ sourceCode, languageId })}
                         />
 
-                        {/* Submit Button (Placeholder for future submission endpoint) */}
+                        {/* Submit Button (Contest-enabled when opened with ?contestId=...) */}
                         {isAuthenticated && (
                             <button
                                 className="w-full mt-4 btn btn-lg bg-gradient-to-r from-emerald-500 to-cyan-600 border-none text-white"
-                                onClick={() => alert("Submission feature coming soon!")}
+                                onClick={handleContestSubmit}
                             >
-                                Submit Solution
+                                {contestId ? "Submit to Contest" : "Submit Solution"}
                             </button>
                         )}
                     </div>
