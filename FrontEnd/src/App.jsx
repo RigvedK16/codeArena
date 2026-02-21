@@ -49,6 +49,7 @@ import Contests from "./pages/Contests.jsx";
 import ContestDashboard from "./pages/ContestDashboard.jsx";
 import Leaderboard from "./pages/Leaderboard.jsx";
 import UploadProblems from "./pages/UploadProblems.jsx";
+import CreateContest from "./pages/CreateContest.jsx";
 
 function App() {
   return (
@@ -123,6 +124,17 @@ function App() {
             <RequireAuth>
               <RequireAdmin>
                 <UploadProblems />
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/create-contest"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <CreateContest />
               </RequireAdmin>
             </RequireAuth>
           }

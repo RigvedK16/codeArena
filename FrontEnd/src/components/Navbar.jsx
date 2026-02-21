@@ -174,12 +174,20 @@ export default function Navbar() {
                   Dashboard
                 </Link>
                 {user?.role === "admin" && (
-                  <Link
-                    to="/upload-problems"
-                    className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
-                  >
-                    Upload Problems
-                  </Link>
+                  <>
+                    <Link
+                      to="/upload-problems"
+                      className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
+                    >
+                      Upload Problems
+                    </Link>
+                    <Link
+                      to="/create-contest"
+                      className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
+                    >
+                      Create Contest
+                    </Link>
+                  </>
                 )}
                 <div className="flex items-center gap-3">
                   {user?.photoUrl && (
@@ -270,13 +278,22 @@ export default function Navbar() {
                     Dashboard
                   </Link>
                   {user?.role === "admin" && (
-                    <Link
-                      to="/upload-problems"
-                      className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Upload Problems
-                    </Link>
+                    <>
+                      <Link
+                        to="/upload-problems"
+                        className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Upload Problems
+                      </Link>
+                      <Link
+                        to="/create-contest"
+                        className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Create Contest
+                      </Link>
+                    </>
                   )}
                   <button
                     onClick={() => {
