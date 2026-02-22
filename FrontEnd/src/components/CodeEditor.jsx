@@ -486,7 +486,7 @@ export default function CodeEditor({
                         onClick={() => setDuckOpen(true)}
                         className="btn btn-sm px-4 bg-white border border-emerald-500 text-emerald-600 hover:bg-emerald-50"
                     >
-                        Ask Duck 🦆
+                        Ask AI
                     </button>
 
                     <button

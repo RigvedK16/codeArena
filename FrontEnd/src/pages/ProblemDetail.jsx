@@ -1883,6 +1883,8 @@ export default function ProblemDetail() {
                 {submissionResult && (
                   <SubmissionResult
                     result={submissionResult}
+                    sourceCode={editorCode}
+                    languageId={editorLang}
                     onClose={() => setSubmissionResult(null)}
                     onRetry={() => {
                       setSubmissionResult(null);
