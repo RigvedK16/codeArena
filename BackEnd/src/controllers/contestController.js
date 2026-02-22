@@ -605,15 +605,21 @@ exports.getContestLeaderboard = async (req, res) => {
       ]),
     );
 
+    const totalProblems = Array.isArray(contest.problems)
+      ? contest.problems.length
+      : 0;
+
     const leaderboard = (contest.participants || [])
       .map((p) => {
         let totalScore = 0;
         let totalPenaltyTime = 0;
         let totalTimeTaken = 0;
+        let solvedCount = 0;
 
         const stats = p.problemStats || [];
         for (const ps of stats) {
           if (ps.status !== "solved") continue;
+          solvedCount += 1;
           const pointValue = pointsByProblemId.get(String(ps.problemId)) || 0;
           const solvedAtDuration = clampTimeTakenMinutes(
             ps.solvedAtDuration ?? 0,
@@ -634,6 +640,8 @@ exports.getContestLeaderboard = async (req, res) => {
 
         return {
           user: p.userId,
+          solvedCount,
+          totalProblems,
           totalScore,
           totalPenaltyTime,
           totalTimeTaken,

@@ -94,15 +94,17 @@
 // }
 
 // components/Navbar.jsx
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { clearUser } from "../redux/authSlice";
 import { useState, useEffect } from "react";
+import { api } from "../utils/api";
 
 export default function Navbar() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -115,7 +117,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     try {
-      await fetch("/logout", { method: "POST", credentials: "include" });
+      await api("/logout", { method: "POST" });
       dispatch(clearUser());
       navigate("/");
     } catch (err) {
@@ -127,8 +129,13 @@ export default function Navbar() {
     { name: "Problems", path: "/problems" },
     { name: "Contests", path: "/contests" },
     { name: "Leaderboard", path: "/leaderboard" },
-    { name: "Practice", path: "/practice" },
+    { name: "Discussions", path: "/practice" },
   ];
+
+  const isActive = (path) => {
+    const current = location.pathname || "/";
+    return current === path || current.startsWith(path + "/");
+  };
 
   return (
     <nav
@@ -156,7 +163,11 @@ export default function Navbar() {
               <Link
                 key={link.name}
                 to={link.path}
-                className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium rounded-lg hover:bg-emerald-50 transition-colors"
+                className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+                  isActive(link.path)
+                    ? "text-emerald-700 bg-emerald-50"
+                    : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                }`}
               >
                 {link.name}
               </Link>
@@ -167,49 +178,73 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {isAuthenticated ? (
               <>
-                <Link
-                  to="/dashboard"
-                  className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
-                >
-                  Dashboard
-                </Link>
                 {user?.role === "admin" && (
                   <>
                     <Link
                       to="/upload-problems"
-                      className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
+                      className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+                        isActive("/upload-problems")
+                          ? "text-emerald-700 bg-emerald-50"
+                          : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                      }`}
                     >
                       Upload Problems
                     </Link>
                     <Link
                       to="/create-contest"
-                      className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
+                      className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+                        isActive("/create-contest")
+                          ? "text-emerald-700 bg-emerald-50"
+                          : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                      }`}
                     >
                       Create Contest
                     </Link>
                   </>
                 )}
-                <div className="flex items-center gap-3">
-                  {user?.photoUrl && (
-                    <img
-                      src={user.photoUrl}
-                      alt={user.firstName}
-                      className="w-8 h-8 rounded-full border-2 border-emerald-500"
-                    />
-                  )}
-                  <button
-                    onClick={handleLogout}
-                    className="btn btn-sm btn-outline border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white"
+
+                <div className="dropdown dropdown-end">
+                  <div
+                    tabIndex={0}
+                    role="button"
+                    className={`w-9 h-9 rounded-full overflow-hidden border-2 bg-white cursor-pointer ${
+                      isActive("/dashboard")
+                        ? "border-emerald-600"
+                        : "border-emerald-500"
+                    }`}
+                    aria-label="Profile menu"
                   >
-                    Logout
-                  </button>
+                    <img
+                      src={user?.photoUrl}
+                      alt={user?.firstName || "User"}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <ul
+                    tabIndex={0}
+                    className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+                  >
+                    <li className="menu-title">
+                      <span>{user?.firstName} {user?.lastName}</span>
+                    </li>
+                    <li>
+                      <Link to="/dashboard">Profile</Link>
+                    </li>
+                    <li>
+                      <button onClick={handleLogout}>Logout</button>
+                    </li>
+                  </ul>
                 </div>
               </>
             ) : (
               <>
                 <Link
                   to="/login"
-                  className="px-4 py-2 text-gray-700 hover:text-emerald-600 font-medium"
+                  className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+                    isActive("/login")
+                      ? "text-emerald-700 bg-emerald-50"
+                      : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                  }`}
                 >
                   Sign In
                 </Link>
@@ -223,34 +258,76 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {/* Mobile Actions */}
+          <div className="md:hidden flex items-center gap-2">
+            {isAuthenticated && user?.photoUrl ? (
+              <div className="dropdown dropdown-end">
+                <div
+                  tabIndex={0}
+                  role="button"
+                  className={`w-9 h-9 rounded-full overflow-hidden border-2 bg-white cursor-pointer ${
+                    isActive("/dashboard") ? "border-emerald-600" : "border-emerald-500"
+                  }`}
+                  aria-label="Profile menu"
+                >
+                  <img
+                    src={user.photoUrl}
+                    alt={user.firstName || "User"}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <ul
+                  tabIndex={0}
+                  className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+                >
+                  <li>
+                    <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                      Profile
+                    </Link>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        handleLogout();
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      Logout
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            ) : null}
+
+            <button
+              className="p-2 rounded-lg hover:bg-gray-100"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
             >
-              {mobileMenuOpen ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              )}
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {mobileMenuOpen ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -261,7 +338,11 @@ export default function Navbar() {
                 <Link
                   key={link.name}
                   to={link.path}
-                  className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium rounded-lg hover:bg-emerald-50 transition-colors"
+                  className={`px-4 py-3 font-medium rounded-lg transition-colors ${
+                    isActive(link.path)
+                      ? "text-emerald-700 bg-emerald-50"
+                      : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                  }`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   {link.name}
@@ -270,25 +351,26 @@ export default function Navbar() {
               <hr className="my-2" />
               {isAuthenticated ? (
                 <>
-                  <Link
-                    to="/dashboard"
-                    className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Dashboard
-                  </Link>
                   {user?.role === "admin" && (
                     <>
                       <Link
                         to="/upload-problems"
-                        className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
+                        className={`px-4 py-3 font-medium rounded-lg transition-colors ${
+                          isActive("/upload-problems")
+                            ? "text-emerald-700 bg-emerald-50"
+                            : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                        }`}
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Upload Problems
                       </Link>
                       <Link
                         to="/create-contest"
-                        className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
+                        className={`px-4 py-3 font-medium rounded-lg transition-colors ${
+                          isActive("/create-contest")
+                            ? "text-emerald-700 bg-emerald-50"
+                            : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                        }`}
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Create Contest
@@ -309,7 +391,11 @@ export default function Navbar() {
                 <>
                   <Link
                     to="/login"
-                    className="px-4 py-3 text-gray-700 hover:text-emerald-600 font-medium"
+                    className={`px-4 py-3 font-medium rounded-lg transition-colors ${
+                      isActive("/login")
+                        ? "text-emerald-700 bg-emerald-50"
+                        : "text-gray-700 hover:text-emerald-600 hover:bg-emerald-50"
+                    }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Sign In

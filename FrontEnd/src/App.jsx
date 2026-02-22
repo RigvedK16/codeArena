@@ -41,7 +41,7 @@ import LandingPage from "./pages/LandingPage.jsx";
 import Signup from "./pages/Signup.jsx";
 import Login from "./pages/Login.jsx";
 import Problems from "./pages/Problems.jsx"; // 👈 Import new page
-// import Dashboard from "./pages/Dashboard.jsx";
+import Dashboard from "./pages/Dashboard.jsx";
 import ProblemDetail from "./pages/ProblemDetail.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
 import RequireAdmin from "./components/RequireAdmin.jsx";
@@ -112,9 +112,18 @@ function App() {
         <Route
           path="/dashboard"
           element={
-            <div className="pt-24 text-center text-2xl">
-              👤 Dashboard Coming Soon
-            </div>
+            <RequireAuth>
+              <Dashboard />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/dashboard/:userId"
+          element={
+            <RequireAuth>
+              <Dashboard />
+            </RequireAuth>
           }
         />
 

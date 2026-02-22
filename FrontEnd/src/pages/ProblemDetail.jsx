@@ -419,7 +419,13 @@ export default function ProblemDetail() {
   const location = useLocation();
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
+  const urlTab = useMemo(() => {
+    const t = new URLSearchParams(location.search).get("tab");
+    return typeof t === "string" ? t : "";
+  }, [location.search]);
+
   const contestId = new URLSearchParams(location.search).get("contestId");
+  const submissionsOnlyMode = !contestId && urlTab === "submissions";
   const isFullscreenEnforced =
     Boolean(contestId) &&
     new URLSearchParams(location.search).get("fs") === "1";
@@ -435,6 +441,26 @@ export default function ProblemDetail() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState(null);
   const [activeTab, setActiveTab] = useState("description");
+
+  const showEditorPanel = Boolean(contestId) || !submissionsOnlyMode;
+
+  const [mySubmissionsLoading, setMySubmissionsLoading] = useState(false);
+  const [mySubmissionsError, setMySubmissionsError] = useState(null);
+  const [mySubmissions, setMySubmissions] = useState([]);
+  const [mySubmissionStats, setMySubmissionStats] = useState(null);
+  const [selectedSubmissionKey, setSelectedSubmissionKey] = useState(null);
+
+  useEffect(() => {
+    if (!urlTab) return;
+    if (["description", "testcases", "submissions"].includes(urlTab)) {
+      setActiveTab(urlTab);
+    }
+  }, [urlTab, id]);
+
+  useEffect(() => {
+    if (!submissionsOnlyMode) return;
+    setActiveTab("submissions");
+  }, [submissionsOnlyMode, id]);
 
   // Editor state (lifted from CodeEditor)
   const [editorCode, setEditorCode] = useState("");
@@ -487,6 +513,63 @@ export default function ProblemDetail() {
       // ignore
     }
   }, [contestId, contestFlashFromNav]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMySubmissions() {
+      if (!isAuthenticated) return;
+      if (activeTab !== "submissions") return;
+
+      try {
+        setMySubmissionsLoading(true);
+        setMySubmissionsError(null);
+        const res = await api(`/problems/${id}/my-submissions?limit=20`);
+        if (cancelled) return;
+        setMySubmissions(Array.isArray(res?.submissions) ? res.submissions : []);
+        setMySubmissionStats(res?.stats || null);
+
+        const first = Array.isArray(res?.submissions) ? res.submissions[0] : null;
+        const key = first?._id || first?.createdAt || null;
+        setSelectedSubmissionKey(key);
+      } catch (e) {
+        if (!cancelled) setMySubmissionsError(e?.message || "Failed to load submissions");
+      } finally {
+        if (!cancelled) setMySubmissionsLoading(false);
+      }
+    }
+
+    loadMySubmissions();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, id, isAuthenticated]);
+
+  const selectedSubmission = useMemo(() => {
+    if (!selectedSubmissionKey) return null;
+    return (
+      (mySubmissions || []).find((s) => String(s?._id || s?.createdAt) === String(selectedSubmissionKey)) ||
+      null
+    );
+  }, [mySubmissions, selectedSubmissionKey]);
+
+  function langName(languageId) {
+    const idNum = Number(languageId);
+    if (idNum === 71) return "Python";
+    if (idNum === 62) return "Java";
+    if (idNum === 63) return "JavaScript";
+    if (idNum === 52) return "C++";
+    if (idNum === 48) return "C";
+    return `Lang ${languageId}`;
+  }
+
+  function verdictClass(v) {
+    if (v === "Accepted") return "text-emerald-700";
+    if (v === "Wrong Answer") return "text-red-700";
+    if (v === "Time Limit Exceeded") return "text-amber-700";
+    if (v === "Runtime Error") return "text-orange-700";
+    return "text-gray-700";
+  }
 
   const myProblemStatsById = useMemo(() => {
     const map = new Map();
@@ -1211,7 +1294,7 @@ export default function ProblemDetail() {
           </div>
         ) : null}
         {/* Breadcrumb */}
-        {!isFullscreenEnforced ? (
+        {!isFullscreenEnforced && !submissionsOnlyMode ? (
           <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
             {contestId ? (
               <>
@@ -1247,8 +1330,12 @@ export default function ProblemDetail() {
                 ? "grid lg:grid-cols-[280px_1fr_1fr] gap-4 h-full"
                 : "grid lg:grid-cols-[280px_1fr_1fr] gap-6"
               : isFullscreenEnforced
-                ? "grid lg:grid-cols-2 gap-4 h-full"
-                : "grid lg:grid-cols-2 gap-6"
+                ? showEditorPanel
+                  ? "grid lg:grid-cols-2 gap-4 h-full"
+                  : "grid grid-cols-1 gap-4 h-full"
+                : showEditorPanel
+                  ? "grid lg:grid-cols-2 gap-6"
+                  : "grid grid-cols-1 gap-6"
           }
         >
           {/* Contest Questions Sidebar */}
@@ -1335,60 +1422,64 @@ export default function ProblemDetail() {
                 : "space-y-4"
             }
           >
-            {/* Header */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                    {problem.title}
-                  </h1>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-semibold border ${getDifficultyColor(problem.difficulty)}`}
-                    >
-                      {problem.difficulty}
-                    </span>
-                    <div className="flex gap-1 flex-wrap">
-                      {problem.tags?.map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+            {submissionsOnlyMode ? null : (
+              /* Header */
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                      {problem.title}
+                    </h1>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold border ${getDifficultyColor(problem.difficulty)}`}
+                      >
+                        {problem.difficulty}
+                      </span>
+                      <div className="flex gap-1 flex-wrap">
+                        {problem.tags?.map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <Link
-                  to={contestId ? `/contests/${contestId}` : "/problems"}
-                  className="btn btn-sm btn-ghost text-gray-500 hover:text-gray-700"
-                >
-                  ← Back
-                </Link>
-              </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="flex border-b border-gray-200">
-                {["description", "testcases"].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`flex-1 px-4 py-3 text-sm font-medium capitalize transition-colors ${
-                      activeTab === tab
-                        ? "text-emerald-600 border-b-2 border-emerald-500 bg-emerald-50/50"
-                        : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-                    }`}
+                  <Link
+                    to={contestId ? `/contests/${contestId}` : "/problems"}
+                    className="btn btn-sm btn-ghost text-gray-500 hover:text-gray-700"
                   >
-                    {tab}
-                  </button>
-                ))}
+                    ← Back
+                  </Link>
+                </div>
               </div>
+            )}
 
-              <div className="p-5">
-                {activeTab === "description" ? (
+            {submissionsOnlyMode ? null : (
+              <>
+                {/* Tabs / Content */}
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+                  <div className="flex border-b border-gray-200">
+                    {["description", "testcases", "submissions"].map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`flex-1 px-4 py-3 text-sm font-medium capitalize transition-colors ${
+                          activeTab === tab
+                            ? "text-emerald-600 border-b-2 border-emerald-500 bg-emerald-50/50"
+                            : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="p-5">
+                    {activeTab === "description" ? (
                   <div className="prose prose-sm max-w-none">
                     <div
                       className="text-gray-700 leading-relaxed whitespace-pre-wrap"
@@ -1406,7 +1497,7 @@ export default function ProblemDetail() {
                       </div>
                     )}
                   </div>
-                ) : (
+                    ) : activeTab === "testcases" ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <h4 className="font-semibold text-gray-800">
@@ -1471,47 +1562,214 @@ export default function ProblemDetail() {
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
+                    ) : (
+                  <div className="space-y-4">
+                    {!isAuthenticated ? (
+                      <div className="text-sm text-gray-600">
+                        Please <Link to="/login" className="text-emerald-700 font-semibold">login</Link> to view your submissions.
+                      </div>
+                    ) : mySubmissionsLoading ? (
+                      <div className="text-sm text-gray-600">Loading submissions...</div>
+                    ) : mySubmissionsError ? (
+                      <div className="text-sm text-red-600">{mySubmissionsError}</div>
+                    ) : (mySubmissions || []).length === 0 ? (
+                      <div className="text-sm text-gray-600">No submissions yet for this problem.</div>
+                    ) : (
+                      <>
+                        <div className="grid sm:grid-cols-3 gap-3">
+                          <div className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                            <div className="text-xs text-gray-500">Total submissions</div>
+                            <div className="text-lg font-bold text-gray-900">
+                              {mySubmissionStats?.totalSubmissions ?? mySubmissions.length}
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                            <div className="text-xs text-gray-500">Accepted</div>
+                            <div className="text-lg font-bold text-emerald-700">
+                              {mySubmissionStats?.acceptedSubmissions ?? 0}
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                            <div className="text-xs text-gray-500">Acceptance rate</div>
+                            <div className="text-lg font-bold text-gray-900">
+                              {mySubmissionStats?.acceptanceRate ?? 0}%
+                            </div>
+                          </div>
+                        </div>
 
-            {/* Submission Stats */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
-              <h4 className="font-semibold text-gray-800 mb-3">
-                Problem Stats
-              </h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-500">Acceptance Rate</p>
-                  <p className="font-semibold text-emerald-600">—</p>
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-gray-700">My submissions</div>
+                          <div className="space-y-2">
+                            {(mySubmissions || []).map((s) => {
+                              const key = String(s?._id || s?.createdAt);
+                              const isSelected = String(selectedSubmissionKey) === key;
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => setSelectedSubmissionKey(key)}
+                                  className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                                    isSelected
+                                      ? "border-emerald-300 bg-emerald-50/40"
+                                      : "border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/20"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className={`text-sm font-semibold ${verdictClass(s?.verdict)}`}>
+                                      {s?.verdict || "—"}
+                                    </div>
+                                    <div className="text-xs text-gray-500 whitespace-nowrap">
+                                      {s?.createdAt ? new Date(s.createdAt).toLocaleString() : ""}
+                                    </div>
+                                  </div>
+                                  <div className="mt-1 flex items-center justify-between gap-3 text-xs text-gray-600">
+                                    <div className="truncate">{langName(s?.languageId)}</div>
+                                    <div className="whitespace-nowrap">
+                                      {typeof s?.passedTestcases === "number" && typeof s?.totalTestcases === "number"
+                                        ? `${s.passedTestcases}/${s.totalTestcases} tests`
+                                        : ""}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-gray-700">Submitted code</div>
+                          <pre className="bg-white border border-gray-200 text-gray-800 p-4 rounded-xl text-xs font-mono overflow-x-auto leading-relaxed">
+                            {selectedSubmission?.sourceCode || ""}
+                          </pre>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <p className="text-gray-500">Submissions</p>
-                  <p className="font-semibold text-gray-800">—</p>
+              </>
+            )}
+
+            {submissionsOnlyMode ? (
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
+                <div className="text-sm font-semibold text-gray-800 mb-3">
+                  Submissions
+                </div>
+                <div className="space-y-4">
+                  {!isAuthenticated ? (
+                    <div className="text-sm text-gray-600">
+                      Please{" "}
+                      <Link to="/login" className="text-emerald-700 font-semibold">
+                        login
+                      </Link>{" "}
+                      to view your submissions.
+                    </div>
+                  ) : mySubmissionsLoading ? (
+                    <div className="text-sm text-gray-600">Loading submissions...</div>
+                  ) : mySubmissionsError ? (
+                    <div className="text-sm text-red-600">{mySubmissionsError}</div>
+                  ) : (mySubmissions || []).length === 0 ? (
+                    <div className="text-sm text-gray-600">
+                      No submissions yet for this problem.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid sm:grid-cols-3 gap-3">
+                        <div className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                          <div className="text-xs text-gray-500">Total submissions</div>
+                          <div className="text-lg font-bold text-gray-900">
+                            {mySubmissionStats?.totalSubmissions ?? mySubmissions.length}
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                          <div className="text-xs text-gray-500">Accepted</div>
+                          <div className="text-lg font-bold text-emerald-700">
+                            {mySubmissionStats?.acceptedSubmissions ?? 0}
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                          <div className="text-xs text-gray-500">Acceptance rate</div>
+                          <div className="text-lg font-bold text-gray-900">
+                            {mySubmissionStats?.acceptanceRate ?? 0}%
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-gray-700">My submissions</div>
+                        <div className="space-y-2">
+                          {(mySubmissions || []).map((s) => {
+                            const key = String(s?._id || s?.createdAt);
+                            const isSelected = String(selectedSubmissionKey) === key;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => setSelectedSubmissionKey(key)}
+                                className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                                  isSelected
+                                    ? "border-emerald-300 bg-emerald-50/40"
+                                    : "border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/20"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className={`text-sm font-semibold ${verdictClass(s?.verdict)}`}>
+                                    {s?.verdict || "—"}
+                                  </div>
+                                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                                    {s?.createdAt ? new Date(s.createdAt).toLocaleString() : ""}
+                                  </div>
+                                </div>
+                                <div className="mt-1 flex items-center justify-between gap-3 text-xs text-gray-600">
+                                  <div className="truncate">{langName(s?.languageId)}</div>
+                                  <div className="whitespace-nowrap">
+                                    {typeof s?.passedTestcases === "number" && typeof s?.totalTestcases === "number"
+                                      ? `${s.passedTestcases}/${s.totalTestcases} tests`
+                                      : ""}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-gray-700">Submitted code</div>
+                        <pre className="bg-white border border-gray-200 text-gray-800 p-4 rounded-xl text-xs font-mono overflow-x-auto leading-relaxed">
+                          {selectedSubmission?.sourceCode || ""}
+                        </pre>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
+            ) : null}
+
+            {/* Removed Problem Stats card */}
           </div>
 
           {/* Code Editor Panel */}
-          <div
-            className={
-              isFullscreenEnforced
-                ? "h-full overflow-auto"
-                : "lg:sticky lg:top-20 lg:self-start"
-            }
-          >
-            <CodeEditor
-              problemId={id}
-              onRun={handleRun}
-              running={running}
-              results={results}
-              onChange={({ sourceCode, languageId }) => {
-                setEditorCode(sourceCode);
-                setEditorLang(languageId);
-              }}
-              onClearResults={() => setResults(null)}
-            />
+          {showEditorPanel ? (
+            <div
+              className={
+                isFullscreenEnforced
+                  ? "h-full overflow-auto"
+                  : "lg:sticky lg:top-20 lg:self-start"
+              }
+            >
+              <CodeEditor
+                problemId={id}
+                onRun={handleRun}
+                running={running}
+                results={results}
+                onChange={({ sourceCode, languageId }) => {
+                  setEditorCode(sourceCode);
+                  setEditorLang(languageId);
+                }}
+                onClearResults={() => setResults(null)}
+              />
 
             {contestId && contestSolve?.expiresAt ? (
               <div className="mt-4 bg-white rounded-2xl shadow-lg border border-gray-200 p-4">
@@ -1634,7 +1892,8 @@ export default function ProblemDetail() {
                 )}
               </>
             )}
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

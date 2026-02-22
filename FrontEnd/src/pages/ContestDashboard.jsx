@@ -422,7 +422,11 @@ export default function ContestDashboard() {
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-gray-900">
-                  Live Leaderboard
+                  {phase === "Live"
+                    ? "Live Leaderboard"
+                    : phase === "Past"
+                      ? "Final Leaderboard"
+                      : "Leaderboard"}
                 </h2>
                 <div className="text-xs text-gray-500">
                   Sorted by score ↓, penalty ↑
@@ -435,6 +439,7 @@ export default function ContestDashboard() {
                     <tr>
                       <th>Rank</th>
                       <th>User</th>
+                      <th className="text-right">Solved</th>
                       <th className="text-right">Score</th>
                       <th className="text-right">Time Taken</th>
                       <th className="text-right">Penalty</th>
@@ -444,7 +449,7 @@ export default function ContestDashboard() {
                     {leaderboard.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="text-center text-gray-500 py-10"
                         >
                           No participants yet
@@ -465,6 +470,9 @@ export default function ContestDashboard() {
                                 {row.user.emailId}
                               </div>
                             ) : null}
+                          </td>
+                          <td className="text-right font-mono text-gray-700">
+                            {`${row.solvedCount ?? 0}/${row.totalProblems ?? (contest?.problems || []).length}`}
                           </td>
                           <td className="text-right font-semibold text-emerald-700">
                             {row.totalScore}

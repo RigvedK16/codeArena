@@ -199,9 +199,13 @@ export default function Contests() {
                           </button>
                         )
                       ) : (
-                        <span className="text-sm font-medium text-gray-500">
-                          Closed
-                        </span>
+                        <Link
+                          to={`/contests/${contest._id}`}
+                          className="btn btn-outline"
+                          title="View contest stats and leaderboard"
+                        >
+                          View Stats
+                        </Link>
                       )}
                     </div>
                   </div>
@@ -211,18 +215,7 @@ export default function Contests() {
               return (
                 <div
                   key={contest._id}
-                  className={
-                    contest.status === "Past"
-                      ? "cursor-not-allowed"
-                      : "cursor-default"
-                  }
-                  title={
-                    contest.status === "Past"
-                      ? "Contest has ended"
-                      : contest.status === "Upcoming"
-                        ? "Contest is not live yet"
-                        : ""
-                  }
+                  className="cursor-default"
                 >
                   {card}
                 </div>

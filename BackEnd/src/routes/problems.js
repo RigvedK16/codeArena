@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const Problem = require("../models/problem");
+const Submission = require("../models/submission");
 const { userAuth, adminAuth } = require("../middleware/adminAuth");
 
 const CANONICAL_TAGS = [
@@ -382,6 +383,81 @@ router.get("/bulk", userAuth, async (req, res) => {
     success: false,
     message: "Method not allowed. Use POST /problems/bulk to insert in bulk.",
   });
+});
+
+// GET /problems/:id/my-submissions?limit=20
+// Returns the authenticated user's submissions for this problem (includes sourceCode) + basic stats.
+router.get("/:id/my-submissions", userAuth, async (req, res) => {
+  try {
+    const problemId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(problemId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid problem id" });
+    }
+
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(limitRaw, 1), 50)
+      : 20;
+
+    const [totalSubmissions, acceptedSubmissions, verdictAgg, langAgg, submissions] =
+      await Promise.all([
+        Submission.countDocuments({ userId: req.user._id, problemId }),
+        Submission.countDocuments({
+          userId: req.user._id,
+          problemId,
+          verdict: "Accepted",
+        }),
+        Submission.aggregate([
+          { $match: { userId: req.user._id, problemId: new mongoose.Types.ObjectId(problemId) } },
+          { $group: { _id: "$verdict", count: { $sum: 1 } } },
+          { $sort: { count: -1, _id: 1 } },
+        ]),
+        Submission.aggregate([
+          { $match: { userId: req.user._id, problemId: new mongoose.Types.ObjectId(problemId) } },
+          { $group: { _id: "$languageId", count: { $sum: 1 } } },
+          { $sort: { count: -1, _id: 1 } },
+        ]),
+        Submission.find({ userId: req.user._id, problemId })
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .select(
+            "verdict languageId runtime passedTestcases totalTestcases sourceCode createdAt",
+          )
+          .lean(),
+      ]);
+
+    const acceptanceRate = totalSubmissions
+      ? Math.round((acceptedSubmissions / totalSubmissions) * 1000) / 10
+      : 0;
+
+    const verdictCounts = {};
+    for (const v of verdictAgg || []) {
+      if (v && v._id) verdictCounts[v._id] = v.count;
+    }
+
+    const languageCounts = (langAgg || []).map((l) => ({
+      languageId: l._id,
+      count: l.count,
+    }));
+
+    return res.json({
+      success: true,
+      problemId,
+      stats: {
+        totalSubmissions,
+        acceptedSubmissions,
+        acceptanceRate,
+        verdictCounts,
+        languageCounts,
+      },
+      submissions,
+    });
+  } catch (error) {
+    console.error("Error fetching my submissions:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 });
 
 // GET single problem by ID (login required)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../utils/api";
 
 export default function Leaderboard() {
@@ -64,11 +65,16 @@ export default function Leaderboard() {
                     <tr key={row.user?._id || row.rank}>
                       <td className="font-semibold">{row.rank}</td>
                       <td>
-                        <div className="font-medium text-gray-900">
-                          {row.user
-                            ? `${row.user.firstName || ""} ${row.user.lastName || ""}`.trim() || row.user.emailId || "User"
-                            : "Unknown"}
-                        </div>
+                        {row.user?._id ? (
+                          <Link
+                            to={`/dashboard/${row.user._id}`}
+                            className="font-medium text-gray-900 hover:text-emerald-700"
+                          >
+                            {`${row.user.firstName || ""} ${row.user.lastName || ""}`.trim() || row.user.emailId || "User"}
+                          </Link>
+                        ) : (
+                          <div className="font-medium text-gray-900">Unknown</div>
+                        )}
                         {row.user?.emailId ? <div className="text-xs text-gray-500">{row.user.emailId}</div> : null}
                       </td>
                       <td className="text-right font-semibold text-emerald-700">{row.totalScore}</td>

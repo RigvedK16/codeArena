@@ -187,7 +187,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0">
-                Practice 1000+ problems, compete in live contests, and climb the global leaderboard.
+                Practice many problems, compete in live contests, and climb the global leaderboard.
                 Support for C++, Java, Python, JavaScript & more.
               </p>
 
@@ -206,21 +206,6 @@ export default function LandingPage() {
                 </Link>
               </div>
 
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-6 mt-12 pt-8 border-t border-gray-200">
-                <div>
-                  <div className="text-2xl md:text-3xl font-bold text-emerald-600">1K+</div>
-                  <div className="text-sm text-gray-500">Problems</div>
-                </div>
-                <div>
-                  <div className="text-2xl md:text-3xl font-bold text-cyan-600">50K+</div>
-                  <div className="text-sm text-gray-500">Users</div>
-                </div>
-                <div>
-                  <div className="text-2xl md:text-3xl font-bold text-purple-600">24/7</div>
-                  <div className="text-sm text-gray-500">Judge System</div>
-                </div>
-              </div>
             </div>
 
             {/* Hero Visual */}
@@ -343,7 +328,7 @@ export default function LandingPage() {
               {
                 step: "2",
                 title: "Pick a Problem",
-                desc: "Browse 1000+ problems filtered by difficulty and topic.",
+                desc: "Browse many problems filtered by difficulty and topic.",
               },
               {
                 step: "3",
