@@ -274,6 +274,7 @@ router.post("/", adminAuth, async (req, res) => {
       constraints: normalizeConstraints(req.body.constraints),
       difficulty: req.body.difficulty,
       tags: normalizeTags(req.body.tags),
+      patterns: normalizeTags(req.body.patterns),
       sampleTestcases: normalizeTestcases(req.body.sampleTestcases),
       hiddenTestcases: normalizeTestcases(req.body.hiddenTestcases),
       ...(req.body.timeLimit !== undefined && req.body.timeLimit !== null
@@ -337,6 +338,7 @@ router.post("/bulk", adminAuth, async (req, res) => {
         constraints: normalizeConstraints(items[i].constraints),
         difficulty: items[i].difficulty,
         tags: normalizeTags(items[i].tags),
+        patterns: normalizeTags(items[i].patterns),
         sampleTestcases: normalizeTestcases(items[i].sampleTestcases),
         hiddenTestcases: normalizeTestcases(items[i].hiddenTestcases),
         ...(items[i].timeLimit !== undefined && items[i].timeLimit !== null
@@ -456,6 +458,209 @@ router.get("/:id/my-submissions", userAuth, async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching my submissions:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// GET /problems/:id/similar?limit=6
+// Returns similar problems based on tag/pattern overlap, with an upsolving bias.
+router.get("/:id/similar", userAuth, async (req, res) => {
+  try {
+    const problemId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(problemId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid problem id" });
+    }
+
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(limitRaw, 1), 12)
+      : 6;
+
+    const baseProblem = await Problem.findById(problemId)
+      .select("difficulty tags patterns title")
+      .lean();
+    if (!baseProblem) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Problem not found" });
+    }
+
+    const difficultyRankByName = { Easy: 0, Medium: 1, Hard: 2 };
+    const baseRank = difficultyRankByName[baseProblem.difficulty] ?? 0;
+    // Upsolving bias:
+    // - Easy -> recommend Medium/Hard
+    // - Medium -> recommend Medium/Hard
+    // - Hard -> recommend Hard
+    const minRecommendedRank = baseRank === 0 ? 1 : baseRank;
+
+    const baseTags = Array.isArray(baseProblem.tags)
+      ? baseProblem.tags
+          .map((t) => (typeof t === "string" ? t.trim() : ""))
+          .filter(Boolean)
+      : [];
+
+    const basePatterns = Array.isArray(baseProblem.patterns)
+      ? baseProblem.patterns
+          .map((t) => (typeof t === "string" ? t.trim() : ""))
+          .filter(Boolean)
+      : [];
+
+    const baseLabelsLower = Array.from(
+      new Set([...baseTags, ...basePatterns].map((t) => t.toLowerCase())),
+    );
+
+    // If tags/patterns are empty, fall back to recommending harder (and then same) problems.
+    if (baseLabelsLower.length === 0) {
+      const allowedDifficulties =
+        minRecommendedRank >= 2 ? ["Hard"] : ["Medium", "Hard"];
+
+      const harderFirst = await Problem.find({
+        _id: { $ne: problemId },
+        difficulty: { $in: allowedDifficulties },
+      })
+        .select("title difficulty tags patterns")
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+
+      return res.json({
+        success: true,
+        base: {
+          _id: baseProblem._id,
+          title: baseProblem.title,
+          difficulty: baseProblem.difficulty,
+          tags: baseProblem.tags || [],
+          patterns: baseProblem.patterns || [],
+        },
+        data: (harderFirst || []).map((p) => ({
+          _id: p._id,
+          title: p.title,
+          difficulty: p.difficulty,
+          tags: p.tags || [],
+          patterns: p.patterns || [],
+          sharedTags: [],
+          tagOverlap: 0,
+          upsolveDelta:
+            (difficultyRankByName[p.difficulty] ?? 0) - (baseRank ?? 0),
+        })),
+      });
+    }
+
+    const difficultyRankSwitch = {
+      $switch: {
+        branches: [
+          { case: { $eq: ["$difficulty", "Easy"] }, then: 0 },
+          { case: { $eq: ["$difficulty", "Medium"] }, then: 1 },
+          { case: { $eq: ["$difficulty", "Hard"] }, then: 2 },
+        ],
+        default: 0,
+      },
+    };
+
+    const pipeline = [
+      {
+        $match: {
+          _id: { $ne: new mongoose.Types.ObjectId(problemId) },
+        },
+      },
+      {
+        $addFields: {
+          __tagsLower: {
+            $map: {
+              input: {
+                $concatArrays: [
+                  { $ifNull: ["$tags", []] },
+                  { $ifNull: ["$patterns", []] },
+                ],
+              },
+              as: "t",
+              in: {
+                $toLower: {
+                  $trim: {
+                    input: { $toString: "$$t" },
+                  },
+                },
+              },
+            },
+          },
+          __difficultyRank: difficultyRankSwitch,
+        },
+      },
+      // Keep recommendations at the same difficulty or harder.
+      { $match: { __difficultyRank: { $gte: minRecommendedRank } } },
+      {
+        $addFields: {
+          __sharedTags: {
+            $setIntersection: ["$__tagsLower", baseLabelsLower],
+          },
+          __upsolveDelta: { $subtract: ["$__difficultyRank", baseRank] },
+        },
+      },
+      {
+        $addFields: {
+          __tagOverlap: { $size: { $ifNull: ["$__sharedTags", []] } },
+          __upsolveBoost: {
+            $cond: [
+              { $gt: ["$__upsolveDelta", 0] },
+              3,
+              {
+                $cond: [{ $eq: ["$__upsolveDelta", 0] }, 1, 0],
+              },
+            ],
+          },
+        },
+      },
+      // Require at least 1 shared tag/pattern to keep recommendations relevant.
+      { $match: { __tagOverlap: { $gt: 0 } } },
+      {
+        $addFields: {
+          __similarityScore: {
+            $add: [
+              { $multiply: ["$__tagOverlap", 10] },
+              "$__upsolveBoost",
+            ],
+          },
+        },
+      },
+      {
+        $sort: {
+          __similarityScore: -1,
+          __tagOverlap: -1,
+          __upsolveDelta: -1,
+          createdAt: -1,
+        },
+      },
+      { $limit: limit },
+      {
+        $project: {
+          title: 1,
+          difficulty: 1,
+          tags: 1,
+          patterns: 1,
+          sharedTags: "$__sharedTags",
+          tagOverlap: "$__tagOverlap",
+          upsolveDelta: "$__upsolveDelta",
+        },
+      },
+    ];
+
+    const recommendations = await Problem.aggregate(pipeline);
+
+    return res.json({
+      success: true,
+      base: {
+        _id: baseProblem._id,
+        title: baseProblem.title,
+        difficulty: baseProblem.difficulty,
+        tags: baseProblem.tags || [],
+        patterns: baseProblem.patterns || [],
+      },
+      data: recommendations || [],
+    });
+  } catch (error) {
+    console.error("Error fetching similar problems:", error);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });

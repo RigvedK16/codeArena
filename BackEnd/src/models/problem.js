@@ -43,6 +43,8 @@ const problemSchema = new mongoose.Schema(
 
     tags: [String],
 
+    patterns: [String],
+
     sampleTestcases: [testcaseSchema],
 
     hiddenTestcases: [testcaseSchema],

@@ -1,15 +1,19 @@
 // components/SubmissionResult.jsx
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { API_BASE } from "../utils/api";
+import { useNavigate } from "react-router-dom";
+import { api, API_BASE } from "../utils/api";
 
 export default function SubmissionResult({
     result,
+    problemId,
     sourceCode,
     languageId,
     onClose,
     onRetry,
 }) {
+    const navigate = useNavigate();
+
     // Close on Escape key
     useEffect(() => {
         const handleEsc = (e) => {
@@ -25,6 +29,10 @@ export default function SubmissionResult({
 
     const [aiAnalysis, setAiAnalysis] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+    const [similarProblems, setSimilarProblems] = useState([]);
+    const [similarLoading, setSimilarLoading] = useState(false);
+    const [similarError, setSimilarError] = useState(null);
 
     const languageLabel = useMemo(() => {
         const map = {
@@ -101,6 +109,41 @@ export default function SubmissionResult({
         // Run once on mount (as requested)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadSimilar() {
+            if (!problemId) return;
+
+            try {
+                setSimilarLoading(true);
+                setSimilarError(null);
+                const res = await api(`/problems/${problemId}/similar?limit=6`);
+                if (cancelled) return;
+                setSimilarProblems(Array.isArray(res?.data) ? res.data : []);
+            } catch (e) {
+                if (!cancelled) {
+                    setSimilarError(e?.message || "Failed to load similar problems");
+                    setSimilarProblems([]);
+                }
+            } finally {
+                if (!cancelled) setSimilarLoading(false);
+            }
+        }
+
+        loadSimilar();
+        return () => {
+            cancelled = true;
+        };
+    }, [problemId, result?.submissionId]);
+
+    const handleOpenProblem = (nextProblemId) => {
+        if (!nextProblemId) return;
+        onClose?.();
+        // Navigate to normal problem view (no submissions tab)
+        navigate(`/problems/${nextProblemId}`);
+    };
 
     const getVerdictStyles = (verdict) => {
         const styles = {
@@ -266,6 +309,92 @@ export default function SubmissionResult({
                             )}
                         </div>
                     )}
+
+                    {/* Similar Problems */}
+                    <div className="pt-1">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+                            Similar problems to try next (upsolving included)
+                        </p>
+
+                        {similarLoading ? (
+                            <div className="animate-pulse rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                <div className="h-3 w-40 rounded bg-gray-200" />
+                                <div className="mt-3 h-3 w-full rounded bg-gray-200" />
+                                <div className="mt-2 h-3 w-5/6 rounded bg-gray-200" />
+                            </div>
+                        ) : similarError ? (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                                {similarError}
+                            </div>
+                        ) : similarProblems.length === 0 ? (
+                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                                No similar problems found yet for this one.
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {similarProblems.map((p) => {
+                                    const shared = Array.isArray(p?.sharedTags) ? p.sharedTags : [];
+                                    const sharedLabel = shared.slice(0, 4).join(", ");
+                                    const upsolveDelta = Number(p?.upsolveDelta);
+
+                                    const tags = Array.isArray(p?.tags) ? p.tags.filter(Boolean) : [];
+                                    const patterns = Array.isArray(p?.patterns) ? p.patterns.filter(Boolean) : [];
+
+                                    const diffBadge =
+                                        p?.difficulty === "Easy"
+                                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                            : p?.difficulty === "Medium"
+                                                ? "bg-amber-100 text-amber-800 border-amber-200"
+                                                : p?.difficulty === "Hard"
+                                                    ? "bg-red-100 text-red-800 border-red-200"
+                                                    : "bg-gray-100 text-gray-800 border-gray-200";
+
+                                    return (
+                                        <button
+                                            key={p?._id}
+                                            type="button"
+                                            onClick={() => handleOpenProblem(p?._id)}
+                                            className="w-full text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors p-3"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-gray-900 truncate">
+                                                        {p?.title || "Untitled"}
+                                                    </p>
+                                                    {sharedLabel ? (
+                                                        <p className="text-xs text-gray-600 mt-0.5 truncate">
+                                                            Shared topics: {sharedLabel}
+                                                        </p>
+                                                    ) : null}
+
+                                                    {patterns.length > 0 ? (
+                                                        <p className="text-xs text-gray-600 mt-0.5 truncate">
+                                                            Patterns: {patterns.slice(0, 4).join(", ")}
+                                                        </p>
+                                                    ) : tags.length > 0 ? (
+                                                        <p className="text-xs text-gray-600 mt-0.5 truncate">
+                                                            Tags: {tags.slice(0, 4).join(", ")}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+
+                                                <div className="shrink-0 flex items-center gap-2">
+                                                    {Number.isFinite(upsolveDelta) && upsolveDelta > 0 ? (
+                                                        <span className="px-2 py-1 rounded-full text-xs font-semibold border bg-cyan-100 text-cyan-800 border-cyan-200">
+                                                            Upsolve
+                                                        </span>
+                                                    ) : null}
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${diffBadge}`}>
+                                                        {p?.difficulty || "—"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Action Buttons */}
                     <div className="flex gap-3 pt-2">

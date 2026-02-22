@@ -2057,6 +2057,7 @@ export default function ProblemDetail() {
                 {submissionResult && (
                   <SubmissionResult
                     result={submissionResult}
+                    problemId={id}
                     sourceCode={editorCode}
                     languageId={editorLang}
                     onClose={() => setSubmissionResult(null)}
