@@ -46,6 +46,11 @@ export default function SubmissionResult({
         return "text-emerald-600";
     }, [aiAnalysis]);
 
+    const deductions = useMemo(() => {
+        const d = aiAnalysis?.deductions;
+        return Array.isArray(d) ? d : [];
+    }, [aiAnalysis]);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -227,11 +232,34 @@ export default function SubmissionResult({
 
                                         <div className="min-w-0">
                                             <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
-                                                Feedback
+                                                Description
                                             </p>
                                             <p className="text-sm text-gray-700">
                                                 {aiAnalysis.feedback}
                                             </p>
+
+                                            {typeof aiAnalysis.score === "number" && aiAnalysis.score < 100 ? (
+                                                <div className="mt-3">
+                                                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                                        Why points were deducted
+                                                    </p>
+
+                                                    {deductions.length === 0 ? (
+                                                        <p className="text-sm text-gray-700">
+                                                            No detailed deductions were provided for this score.
+                                                        </p>
+                                                    ) : (
+                                                        <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                                                            {deductions.map((d, idx) => (
+                                                                <li key={idx}>
+                                                                    <span className="font-semibold text-slate-800">-{d.points}</span>{" "}
+                                                                    <span>{d.reason}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </div>
+                                            ) : null}
                                         </div>
                                     </div>
                                 </div>

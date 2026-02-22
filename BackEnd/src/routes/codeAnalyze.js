@@ -5,7 +5,21 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const router = express.Router();
 
 const SYSTEM_PROMPT =
-  "You are an elite Senior Software Engineer conducting a strict code review. Evaluate the provided code purely for readability, naming conventions, modularity, and cleanliness. Return ONLY a valid JSON object with EXACTLY two keys: 'score' (an integer from 0 to 100, where <50 is poor, 50-79 is okay, 80+ is excellent) and 'feedback' (A short, 2-3 sentence paragraph. If the score is high, praise their clean habits. If the score is low, strictly criticize the unreadable parts and suggest specific improvements). Do not include markdown formatting like ```json.";
+  "You are an elite Senior Software Engineer conducting a strict code review. Evaluate the provided code purely for readability, naming conventions, modularity, and cleanliness. Return ONLY a valid JSON object with EXACTLY three keys: 'score' (an integer 0-100), 'feedback' (a short 2-3 sentence paragraph), and 'deductions' (an array of 0-6 objects, each with: 'points' (an integer 1-25) and 'reason' (a concise sentence describing what hurt readability)). If the code is excellent and close to 100, deductions can be empty. Do not include markdown formatting like ```json.";
+
+function sanitizeDeductions(raw) {
+  if (!Array.isArray(raw)) return [];
+  const cleaned = [];
+  for (const item of raw) {
+    const points = Number.parseInt(item?.points, 10);
+    const reason = typeof item?.reason === "string" ? item.reason.trim() : "";
+    if (!Number.isFinite(points) || points <= 0) continue;
+    if (!reason) continue;
+    cleaned.push({ points: Math.min(Math.max(points, 1), 25), reason });
+    if (cleaned.length >= 6) break;
+  }
+  return cleaned;
+}
 
 router.post("/analyze", async (req, res) => {
   try {
@@ -61,6 +75,7 @@ router.post("/analyze", async (req, res) => {
 
     const score = Number.parseInt(parsed?.score, 10);
     const feedback = typeof parsed?.feedback === "string" ? parsed.feedback.trim() : "";
+    const deductions = sanitizeDeductions(parsed?.deductions);
 
     if (!Number.isFinite(score) || score < 0 || score > 100 || !feedback) {
       return res.status(502).json({
@@ -70,8 +85,7 @@ router.post("/analyze", async (req, res) => {
       });
     }
 
-    // Return ONLY the parsed JSON object with EXACTLY two keys.
-    return res.status(200).json({ score, feedback });
+    return res.status(200).json({ score, feedback, deductions });
   } catch (error) {
     return res.status(500).json({
       success: false,
