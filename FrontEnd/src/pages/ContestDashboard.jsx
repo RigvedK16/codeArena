@@ -92,6 +92,15 @@ export default function ContestDashboard() {
     return getPhase(contest.startTime, contest.endTime);
   }, [contest, nowMs]);
 
+  const canRegisterNow = useMemo(() => {
+    if (!contest) return false;
+    if (contest.isRegistered) return false;
+    const startMs = new Date(contest.startTime).getTime();
+    if (!Number.isFinite(startMs)) return false;
+    const closesAtMs = startMs - 5 * 60 * 1000;
+    return nowMs <= closesAtMs;
+  }, [contest, nowMs]);
+
   const canSolve = useMemo(() => {
     if (!contest) return false;
     return phase === "Live" && Boolean(contest.isRegistered);
@@ -128,6 +137,25 @@ export default function ContestDashboard() {
     }
   };
 
+  const exitFullscreen = async () => {
+    try {
+      if (document.exitFullscreen) return await document.exitFullscreen();
+      if (document.webkitExitFullscreen) return await document.webkitExitFullscreen();
+      if (document.mozCancelFullScreen) return await document.mozCancelFullScreen();
+      if (document.msExitFullscreen) return await document.msExitFullscreen();
+    } catch {
+      // ignore
+    }
+  };
+
+  const stopStreamTracks = (stream) => {
+    try {
+      stream?.getTracks?.().forEach((t) => t.stop());
+    } catch {
+      // ignore
+    }
+  };
+
   const getIsInFullscreen = () =>
     Boolean(
       document.fullscreenElement ||
@@ -138,12 +166,52 @@ export default function ContestDashboard() {
 
   const confirmSolve = async () => {
     if (!solvePopup?.problemId || !contest?._id) return;
+
+    // Ask for camera permission BEFORE fullscreen by triggering the prompt first.
+    // We don't await immediately so that fullscreen request still counts as a user gesture.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Your browser does not support camera access.");
+      return;
+    }
+
+    let cameraStreamPromise;
+    try {
+      cameraStreamPromise = navigator.mediaDevices.getUserMedia({ video: true });
+    } catch {
+      alert("Camera permission is required to start solving.");
+      return;
+    }
+
     await requestFullscreen();
     if (!getIsInFullscreen()) {
+      // If the user denies fullscreen, stop the camera stream if it got granted.
+      Promise.resolve(cameraStreamPromise)
+        .then((s) => stopStreamTracks(s))
+        .catch(() => null);
       alert(
         "Fullscreen is required to start solving. Please allow fullscreen and try again.",
       );
       return;
+    }
+
+    let cameraStream;
+    try {
+      cameraStream = await cameraStreamPromise;
+      stopStreamTracks(cameraStream);
+    } catch {
+      await exitFullscreen();
+      alert("Camera permission is required to start solving.");
+      return;
+    }
+
+    // Reset proctoring strikes for this contest attempt.
+    try {
+      sessionStorage.setItem(
+        `contest:proctorStrikes:${contest._id}`,
+        "0",
+      );
+    } catch {
+      // ignore
     }
 
     // Start the 60-min timer exactly when the user clicks Start Solving.
@@ -304,11 +372,11 @@ export default function ContestDashboard() {
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {phase === "Live" && !contest.isRegistered ? (
+            {phase === "Upcoming" && !contest.isRegistered ? (
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={registering}
+                disabled={registering || !canRegisterNow}
                 onClick={handleRegister}
                 title="Register to unlock solving"
               >
@@ -330,9 +398,14 @@ export default function ContestDashboard() {
             <div>
               <div className="text-xs text-gray-500">Status</div>
               <div className="text-lg font-semibold text-gray-900">{phase}</div>
+              {phase === "Upcoming" && !contest.isRegistered && !canRegisterNow ? (
+                <div className="mt-1 text-xs text-red-700">
+                  Registration is closed (closes 5 minutes before start).
+                </div>
+              ) : null}
               {phase === "Live" && !contest.isRegistered ? (
                 <div className="mt-1 text-xs text-amber-700">
-                  You must register to solve contest problems.
+                  Registration is closed. You must register before the contest starts.
                 </div>
               ) : null}
             </div>

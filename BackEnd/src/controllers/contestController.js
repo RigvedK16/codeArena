@@ -341,7 +341,24 @@ exports.registerForContest = async (req, res) => {
     }
 
     const nowMs = Date.now();
+    const startMs = new Date(contest.startTime).getTime();
     const endMs = new Date(contest.endTime).getTime();
+
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid contest schedule" });
+    }
+
+    // Registration allowed from creation time until 5 minutes before start.
+    const registrationClosesAtMs = startMs - 5 * 60 * 1000;
+    if (nowMs > registrationClosesAtMs) {
+      return res.status(400).json({
+        success: false,
+        message: "Registration is closed (closes 5 minutes before contest starts)",
+      });
+    }
+
     if (nowMs > endMs) {
       return res
         .status(400)

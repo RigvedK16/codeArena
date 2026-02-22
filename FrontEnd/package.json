@@ -13,6 +13,8 @@
     "@clerk/clerk-react": "^5.60.0",
     "@reduxjs/toolkit": "^2.11.2",
     "@tailwindcss/vite": "^4.1.18",
+    "@tensorflow-models/blazeface": "^0.1.0",
+    "@tensorflow/tfjs": "^4.22.0",
     "axios": "^1.13.4",
     "prismjs": "^1.30.0",
     "qrcode.react": "^4.2.0",
@@ -22,6 +24,7 @@
     "react-redux": "^9.2.0",
     "react-router-dom": "^7.13.0",
     "react-simple-code-editor": "^0.14.1",
+    "react-webcam": "^7.2.0",
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {

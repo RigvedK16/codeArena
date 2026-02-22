@@ -18,6 +18,13 @@ function formatDateTime(dt) {
   }
 }
 
+function canRegisterContest(contest, nowMs) {
+  const startMs = new Date(contest.startTime).getTime();
+  if (!Number.isFinite(startMs)) return false;
+  const closesAtMs = startMs - 5 * 60 * 1000;
+  return nowMs <= closesAtMs;
+}
+
 export default function Contests() {
   const [contests, setContests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +71,7 @@ export default function Contests() {
     return (contests || []).map((c) => ({
       ...c,
       status: getContestStatus(c, nowMs),
+      canRegisterNow: canRegisterContest(c, nowMs),
     }));
   }, [contests, nowMs]);
 
@@ -167,13 +175,10 @@ export default function Contests() {
                           <button
                             type="button"
                             className="btn btn-primary"
-                            disabled={registeringId === contest._id}
-                            onClick={() => handleRegister(contest._id)}
-                            title="Register to join this contest"
+                            disabled
+                            title="Registration is closed (closes 5 minutes before contest starts)"
                           >
-                            {registeringId === contest._id
-                              ? "Registering..."
-                              : "Register"}
+                            Registration Closed
                           </button>
                         )
                       ) : contest.status === "Upcoming" ? (
@@ -190,12 +195,23 @@ export default function Contests() {
                           <button
                             type="button"
                             className="btn btn-primary"
-                            disabled={registeringId === contest._id}
-                            onClick={() => handleRegister(contest._id)}
+                            disabled={registeringId === contest._id || !contest.canRegisterNow}
+                            onClick={
+                              contest.canRegisterNow
+                                ? () => handleRegister(contest._id)
+                                : undefined
+                            }
+                            title={
+                              contest.canRegisterNow
+                                ? "Register to join this contest"
+                                : "Registration is closed (closes 5 minutes before contest starts)"
+                            }
                           >
                             {registeringId === contest._id
                               ? "Registering..."
-                              : "Register"}
+                              : contest.canRegisterNow
+                                ? "Register"
+                                : "Registration Closed"}
                           </button>
                         )
                       ) : (

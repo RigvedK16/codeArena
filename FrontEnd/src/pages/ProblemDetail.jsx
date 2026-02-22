@@ -404,6 +404,7 @@ import { useSelector } from "react-redux";
 import { api } from "../utils/api";
 import CodeEditor from "../components/CodeEditor";
 import SubmissionResult from "../components/SubmissionResult";
+import ContestProctoringOverlay from "../components/ContestProctoringOverlay";
 
 function formatSolveCountdown(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -487,6 +488,10 @@ export default function ProblemDetail() {
   const [isInFullscreen, setIsInFullscreen] = useState(false);
   const wasFullscreenRef = useRef(false);
   const isLeavingFullscreenEnforcementRef = useRef(false);
+
+  const [proctorWarning, setProctorWarning] = useState(null);
+  const proctorWarningOpenRef = useRef(false);
+  const suppressFsAutoSubmitUntilRef = useRef(0);
 
   useEffect(() => {
     if (!contestId) return;
@@ -647,6 +652,18 @@ export default function ProblemDetail() {
       document.mozFullScreenElement ||
       document.msFullscreenElement,
     );
+
+  const requestFullscreen = async () => {
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) return await el.requestFullscreen();
+      if (el.webkitRequestFullscreen) return await el.webkitRequestFullscreen();
+      if (el.mozRequestFullScreen) return await el.mozRequestFullScreen();
+      if (el.msRequestFullscreen) return await el.msRequestFullscreen();
+    } catch {
+      // ignore
+    }
+  };
   const exitFullscreen = async () => {
     try {
       if (document.exitFullscreen) return await document.exitFullscreen();
@@ -835,6 +852,13 @@ export default function ProblemDetail() {
         : NaN;
       const hasValidSolveTimer = Number.isFinite(expiresAtMs);
       if (wasFullscreenRef.current && !inFs && hasValidSolveTimer) {
+        // If we are inside a proctor warning flow, don't treat this as an escape.
+        if (Date.now() < Number(suppressFsAutoSubmitUntilRef.current || 0)) {
+          requestFullscreen();
+          wasFullscreenRef.current = inFs;
+          return;
+        }
+
         // Exited fullscreen (ESC/browser UI). Auto-submit and go back to leaderboard.
         await logFullscreenViolation();
         if (!autoSubmitted) {
@@ -884,6 +908,101 @@ export default function ProblemDetail() {
       navigate(`/contests/${contestId}#leaderboard`, { replace: true });
     } catch {
       // ignore
+    }
+  };
+
+  const proctorStrikeCountRef = useRef(0);
+  const proctorAutoEndedRef = useRef(false);
+  const autoSubmitDueToProctoringRef = useRef(null);
+
+  const autoSubmitDueToProctoring = async () => {
+    if (!contestId) return;
+    if (proctorAutoEndedRef.current) return;
+    proctorAutoEndedRef.current = true;
+
+    try {
+      setAutoSubmitted(true);
+      await handleContestSubmit({ isAuto: true });
+    } catch {
+      // ignore
+    }
+
+    isLeavingFullscreenEnforcementRef.current = true;
+    try {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("contest:proctor-stop", {
+            detail: { contestId, problemId: id },
+          }),
+        );
+      } catch {
+        // ignore
+      }
+
+      if (isFullscreenEnforced) await exitFullscreen();
+    } finally {
+      document.body.classList.remove("contest-fullscreen");
+      setIsInFullscreen(false);
+      navigate(`/contests/${contestId}#leaderboard`, { replace: true });
+    }
+  };
+
+  autoSubmitDueToProctoringRef.current = autoSubmitDueToProctoring;
+
+  // Proctoring: warn on "moved away" and auto-submit after 3 warnings.
+  useEffect(() => {
+    if (!contestId) return;
+
+    // Reset strikes on contest problem entry so fullscreen only exits after 3 fresh violations.
+    proctorStrikeCountRef.current = 0;
+    proctorAutoEndedRef.current = false;
+    proctorWarningOpenRef.current = false;
+    setProctorWarning(null);
+
+    const onViolation = (e) => {
+      const incomingContestId = e?.detail?.contestId;
+      const type = e?.detail?.type;
+      if (!incomingContestId || incomingContestId !== contestId) return;
+
+      // Only treat "moved away" as strikes (head moved away from center).
+      if (type !== "FACE_NOT_CENTERED") return;
+
+      // Don't stack multiple popups at once.
+      if (proctorWarningOpenRef.current) return;
+
+      const next = (proctorStrikeCountRef.current || 0) + 1;
+      proctorStrikeCountRef.current = next;
+
+      if (next < 3) {
+        // While the popup is up (and shortly after OK), ignore fullscreen-exit auto-submit.
+        suppressFsAutoSubmitUntilRef.current = Date.now() + 15000;
+        proctorWarningOpenRef.current = true;
+        setProctorWarning({
+          strike: next,
+          message: `Warning ${next}/3: Keep your face centered on the screen. After 3 warnings, the test will be auto-submitted.`,
+        });
+        return;
+      }
+
+      if (next >= 3) {
+        // fire and forget
+        autoSubmitDueToProctoringRef.current?.();
+      }
+    };
+
+    window.addEventListener("contest:proctor-violation", onViolation);
+    return () =>
+      window.removeEventListener("contest:proctor-violation", onViolation);
+  }, [contestId]);
+
+  const acknowledgeProctorWarning = async () => {
+    proctorWarningOpenRef.current = false;
+    setProctorWarning(null);
+
+    if (isFullscreenEnforced) {
+      suppressFsAutoSubmitUntilRef.current = Date.now() + 4000;
+      // OK click is a user gesture, so fullscreen should be allowed.
+      await requestFullscreen();
     }
   };
 
@@ -1018,6 +1137,17 @@ export default function ProblemDetail() {
         });
       }
 
+      // Stop camera + detection once a contest submission completes.
+      try {
+        window.dispatchEvent(
+          new CustomEvent("contest:proctor-stop", {
+            detail: { contestId, problemId: id },
+          }),
+        );
+      } catch {
+        // ignore
+      }
+
       return res;
     } catch (err) {
       if (!isAuto) {
@@ -1075,6 +1205,16 @@ export default function ProblemDetail() {
       "Submit contest and end the test? You will be taken to the leaderboard.",
     );
     if (!ok) return;
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent("contest:proctor-stop", {
+          detail: { contestId, problemId: id },
+        }),
+      );
+    } catch {
+      // ignore
+    }
 
     isLeavingFullscreenEnforcementRef.current = true;
     try {
@@ -1226,6 +1366,30 @@ export default function ProblemDetail() {
             : "container mx-auto px-4 py-6"
         }
       >
+        {proctorWarning && contestId ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-lg bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <div className="text-xs text-gray-500">Proctoring warning</div>
+              <div className="mt-1 text-lg font-bold text-gray-900">
+                Warning {proctorWarning.strike}/3
+              </div>
+              <div className="mt-3 text-sm text-gray-700">
+                {proctorWarning.message}
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <button
+                  type="button"
+                  className="btn bg-emerald-600 hover:bg-emerald-700 border-none text-white"
+                  onClick={acknowledgeProctorWarning}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {switchPopup ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
             <div className="w-full max-w-lg bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
@@ -1759,17 +1923,27 @@ export default function ProblemDetail() {
                   : "lg:sticky lg:top-20 lg:self-start"
               }
             >
-              <CodeEditor
-                problemId={id}
-                onRun={handleRun}
-                running={running}
-                results={results}
-                onChange={({ sourceCode, languageId }) => {
-                  setEditorCode(sourceCode);
-                  setEditorLang(languageId);
-                }}
-                onClearResults={() => setResults(null)}
-              />
+              <div className="relative">
+                <CodeEditor
+                  problemId={id}
+                  onRun={handleRun}
+                  running={running}
+                  results={results}
+                  onChange={({ sourceCode, languageId }) => {
+                    setEditorCode(sourceCode);
+                    setEditorLang(languageId);
+                  }}
+                  onClearResults={() => setResults(null)}
+                />
+
+                {contestId ? (
+                  <ContestProctoringOverlay
+                    contestId={contestId}
+                    problemId={id}
+                    enabled={true}
+                  />
+                ) : null}
+              </div>
 
             {contestId && contestSolve?.expiresAt ? (
               <div className="mt-4 bg-white rounded-2xl shadow-lg border border-gray-200 p-4">
