@@ -1,7 +1,15 @@
 // components/SubmissionResult.jsx
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { API_BASE } from "../utils/api";
 
-export default function SubmissionResult({ result, onClose, onRetry }) {
+export default function SubmissionResult({
+    result,
+    sourceCode,
+    languageId,
+    onClose,
+    onRetry,
+}) {
     // Close on Escape key
     useEffect(() => {
         const handleEsc = (e) => {
@@ -14,6 +22,80 @@ export default function SubmissionResult({ result, onClose, onRetry }) {
     if (!result) return null;
 
     const isAccepted = result.verdict === "Accepted";
+
+    const [aiAnalysis, setAiAnalysis] = useState(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+    const languageLabel = useMemo(() => {
+        const map = {
+            48: "C (GCC)",
+            52: "C++ (GCC)",
+            62: "Java (OpenJDK)",
+            63: "JavaScript (Node.js)",
+            71: "Python (3.8.1)",
+        };
+        const numeric = Number(languageId);
+        return map[numeric] || String(languageId ?? "unknown");
+    }, [languageId]);
+
+    const scoreColorClass = useMemo(() => {
+        const score = aiAnalysis?.score;
+        if (typeof score !== "number") return "text-gray-700";
+        if (score < 50) return "text-red-600";
+        if (score < 80) return "text-amber-600";
+        return "text-emerald-600";
+    }, [aiAnalysis]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const analyze = async () => {
+            if (!isAccepted) return;
+
+            const code = typeof sourceCode === "string" ? sourceCode : "";
+            if (!code.trim()) return;
+
+            try {
+                setIsAnalyzing(true);
+
+                const res = await fetch(`${API_BASE}/api/code/analyze`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        code,
+                        language: languageLabel,
+                    }),
+                });
+
+                const data = await res.json().catch(() => null);
+                if (!res.ok) {
+                    const msg = data?.message || "AI readability analysis failed";
+                    throw new Error(msg);
+                }
+
+                if (!cancelled) setAiAnalysis(data);
+            } catch (err) {
+                if (!cancelled) {
+                    setAiAnalysis({
+                        score: 0,
+                        feedback: `AI readability analysis failed: ${err?.message || "Unknown error"}`,
+                    });
+                }
+            } finally {
+                if (!cancelled) setIsAnalyzing(false);
+            }
+        };
+
+        analyze();
+        return () => {
+            cancelled = true;
+        };
+        // Run once on mount (as requested)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const getVerdictStyles = (verdict) => {
         const styles = {
@@ -28,9 +110,11 @@ export default function SubmissionResult({ result, onClose, onRetry }) {
 
     const progressPercent = Math.round((result.passedTestcases / result.totalTestcases) * 100);
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+    if (typeof document === "undefined") return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[calc(100vh-6rem)] overflow-y-auto">
 
                 {/* Header */}
                 <div className={`px-6 py-4 border-b ${isAccepted ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
@@ -115,6 +199,46 @@ export default function SubmissionResult({ result, onClose, onRetry }) {
                         </div>
                     </div>
 
+                    {/* AI Feedback (Readability Score) */}
+                    {isAccepted && (
+                        <div className="pt-1">
+                            {isAnalyzing && (
+                                <div className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="text-sm text-slate-700">
+                                        🤖 AI Senior Engineer is reviewing your code readability...
+                                    </div>
+                                    <div className="mt-3 h-3 w-24 rounded bg-slate-200" />
+                                    <div className="mt-2 h-3 w-full rounded bg-slate-200" />
+                                    <div className="mt-2 h-3 w-5/6 rounded bg-slate-200" />
+                                </div>
+                            )}
+
+                            {!isAnalyzing && aiAnalysis && (
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-start gap-4">
+                                        <div className="shrink-0">
+                                            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                                AI Readability Score
+                                            </p>
+                                            <p className={`text-3xl font-bold leading-none ${scoreColorClass}`}>
+                                                {aiAnalysis.score}
+                                            </p>
+                                        </div>
+
+                                        <div className="min-w-0">
+                                            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                                Feedback
+                                            </p>
+                                            <p className="text-sm text-gray-700">
+                                                {aiAnalysis.feedback}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Action Buttons */}
                     <div className="flex gap-3 pt-2">
                         <button
@@ -132,6 +256,7 @@ export default function SubmissionResult({ result, onClose, onRetry }) {
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

@@ -46,6 +46,7 @@ const runRouter = require("./routes/run");
 const problemsRouter = require("./routes/problems");
 const contestsRouter = require("./routes/contests");
 const chatRouter = require("./routes/chat");
+const codeAnalyzeRouter = require("./routes/codeAnalyze");
 const submitRouter = require("./routes/submit");
 const usersRouter = require("./routes/users");
 
@@ -56,6 +57,7 @@ app.use("/groups", groupsRouter);
 app.use("/problems", problemsRouter);
 app.use("/contests", contestsRouter);
 app.use("/api/chat", chatRouter);
+app.use("/api/code", codeAnalyzeRouter);
 
 // ==========================================
 // 🚨 TRAP 2: THE GLOBAL ERROR CATCHER
